@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "bia-converter"
+version = "0.1.0"
+description = ""
+authors = ["Matthew Hartley <matthewh@ebi.ac.uk>"]
+readme = "README.md"
+packages = [{include = "bia_converter"}]
+
+[tool.poetry.scripts]
+bia-converter = "bia_converter.cli:app"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = "^0.9.0"
+ruamel-yaml = "^0.18.5"
+pydantic = "<2"
+bia-integrator-api = {path = "/Users/matthewh/projects/bia-integrator/clients/python"}
+rich = "^13.7.0"
+requests = "^2.31.0"
+python-dotenv = "^1.0.0"
+zarr = "^2.16.1"
+dask = "^2023.12.0"
+microfilm = "^0.2.1"
+aiohttp = "^3.9.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

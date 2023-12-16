@@ -30,3 +30,5 @@ def cached_convert_to_zarr_and_get_fpath(image, input_fpath):
         run_zarr_conversion(input_fpath, zarr_fpath)
 
     return zarr_fpath
+
+# /nfs/biostudies/.adm/databases/prod/usergroup/Users/r/rami.almaskari@helmholtz-munich.de/UCHL-1\ Chow\ 778/
