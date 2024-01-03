@@ -1,7 +1,8 @@
+from typing import Dict, List
 from pathlib import Path
 
 from ruamel.yaml import YAML
-from pydantic import BaseSettings
+from pydantic import BaseSettings, BaseModel
 
 
 class Settings(BaseSettings):
@@ -16,6 +17,16 @@ class Settings(BaseSettings):
         env_file = '.env'
 
 settings = Settings()
+
+
+class ConversionSettings(BaseModel):
+    convert_all: bool = False
+
+class StudySettings(BaseModel):
+    representative_image: Dict[str, str] | None
+    images_to_convert: List[Dict[str, str]] = []
+    conversion_settings: ConversionSettings
+
 
 
 def load_config():

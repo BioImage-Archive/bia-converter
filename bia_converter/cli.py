@@ -3,7 +3,7 @@ import logging
 import rich
 import typer
 
-from bia_converter.config import load_config
+from bia_converter.config import load_config, StudySettings
 from bia_converter.scli import rw_client, get_study_uuid_by_accession_id
 from bia_converter.utils import (
     create_and_persist_image_from_fileref,
@@ -75,21 +75,29 @@ def convert(accession_id: str):
 
     logging.basicConfig(level=logging.INFO)
     raw_config = load_config()
-
-    images_to_check = raw_config["studies"][accession_id]["images_to_convert"]
-
     study_uuid = get_study_uuid_by_accession_id(accession_id)
+
+    study_settings = StudySettings.parse_obj(raw_config["studies"][accession_id])
+
     work_plan = []
-    for image in images_to_check:
-        if not get_representation_by_type(study_uuid, image["name"], rep_type="ome_ngff"):
-            ensure_assigned(study_uuid, image["name"])
-            work_plan.append(("convert_by_accession_id_and_name", accession_id, image["name"]))
-        if not get_representation_by_type(study_uuid, image["name"], rep_type="thumbnail"):
-            work_plan.append(("create_thumbnail_by_accession_id_and_name", accession_id, image["name"]))
+    if study_settings.conversion_settings.convert_all:
+        all_images = rw_client.get_study_images(study_uuid, limit=10**6)
+        for image in all_images:
+            if not get_representation_by_type(study_uuid, image.name, rep_type="ome_ngff"):
+                work_plan.append(("convert_by_accession_id_and_name", accession_id, image.name))
+            if not get_representation_by_type(study_uuid, image.name, rep_type="thumbnail"):
+                work_plan.append(("create_thumbnail_by_accession_id_and_name", accession_id, image.name))
+    else:
+        images_to_check = raw_config["studies"][accession_id]["images_to_convert"]
 
+        for image in images_to_check:
+            if not get_representation_by_type(study_uuid, image["name"], rep_type="ome_ngff"):
+                ensure_assigned(study_uuid, image["name"])
+                work_plan.append(("convert_by_accession_id_and_name", accession_id, image["name"]))
+            if not get_representation_by_type(study_uuid, image["name"], rep_type="thumbnail"):
+                work_plan.append(("create_thumbnail_by_accession_id_and_name", accession_id, image["name"]))
 
-    # for func, accession_id, image_name in work_plan:
-    #     convert_by_accession_id_and_name(accession_id, image_name)
+    rich.print(work_plan)
     execute_work_plan(work_plan)
 
     
