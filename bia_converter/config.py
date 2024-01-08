@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     cache_root_dirpath: Path = Path.home()/".cache"/"bia-converter"
     bioformats2raw_java_home: str
     bioformats2raw_bin: str
-    config_fpath: Path = Path("dome.yaml")
+    config_fpath: Path = Path("bia.yaml")
 
     class Config:
         env_file = '.env'

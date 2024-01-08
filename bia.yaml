@@ -1,0 +1,78 @@
+defaults:
+  image_representations:
+    - ome_ngff
+    - thumbnail
+studies:
+  S-BIAD582:
+    representative_image:
+      name: 18_wt_wg488-en546-slp594-odd647/mps/10a_18_wt_wg488-en546-slp594-odd647_019_mp.tif
+    images_to_convert:
+      - name: 18_wt_wg488-en546-slp594-odd647/mps/10a_18_wt_wg488-en546-slp594-odd647_019_mp.tif
+      - name: 54_wg_D488-cad546-wglacZ594-opa647/mps/6c_54_wg_D488-cad546-wglacZ594-opa647_009_mp.tif
+      - name: 53_tor_wglacZ488-opa546-cad594-D647/stacks/7a_53_tor_wglacZ488-opa546-cad594-D647_022.tif
+      - name: 53_tor_wglacZ488-opa546-cad594-D647/raw_mps/7b_53_tor_wglacZ488-opa546-cad594-D647_021_rawmp.tif
+      - name: 53_tor_wglacZ488-opa546-cad594-D647/raw_mps/5-5c_53_tor_wglacZ488-opa546-cad594-D647_017_rawmp.tif
+  S-BIAD606:
+    representative_image:
+      name: PycLit_InsVI_3_postMolt6_posBody.tif
+    images_to_convert:
+      - name: PycLit_InsV_1_postMolt3.tif
+        options:
+          transpose_t_z: True
+      - name: PycLit_InsVI_3_postMolt6_posBody.tif
+        options:
+          transpose_t_z: True
+      - name: PycLit_Subad_1_postMolt1_posBody.tif
+        options:
+          transpose_t_z: True
+  S-BIAD626:
+    representative_image:
+      name: Tee_etal_2023/Fig4A.S7/Fig4A.S7_PDLP5_4-03_2.czi
+  S-BIAD746:
+    representative_image:
+      name: Figur1P and 1Q-BC patient tumor microarray/Figure 1P-colocalization for EglN1 and TOM20 images/F9/F9-2.tif
+    images_to_convert:
+      - name: Figur1P and 1Q-BC patient tumor microarray/Figure 1P-colocalization for EglN1 and TOM20 images/F9/F9-2.tif
+  S-BIAD886:
+    representative_image:
+      name: claudin_atoh/20220813_1_wt/20220813_1-O2_wt/20220813_1-O2_wt.tiff
+    images_to_convert:
+      - name: claudin_atoh/20220813_1_wt/20220813_1-O2_wt/20220813_1-O2_wt.tiff
+      - name: claudin_atoh/20220813_1_wt/20220813_1-OP1_wt/20220813_1-OP1_wt.czi
+  S-BIAD963:
+    representative_image:
+      name: Fig3a/MAX_Mag20x_Tile0_Ch638_Sh0_Rot0.tif
+    images_to_convert:
+      - name: Fig3a/MAX_Mag20x_Tile0_Ch638_Sh0_Rot0.tif
+      - name: Fig3a/MAX_Mag20x_Tile0_Ch561_Sh0_Rot0.tif
+      - name: Fig2d/mesoSPIM(Benchtop)-Mitutoyo5x/MAX_5X_Tile0_Ch561_Sh0-Angle0.tif
+  S-BIAD915:
+    representative_image:
+      name: F2/IF/35E1_DAPI_CDH1_MYH10_F-actin.tif
+    images_to_convert:
+      - name: F2/IF/35E1_DAPI_CDH1_MYH10_F-actin.tif
+  S-BIAD916:
+    conversion_settings:
+      convert_all: True
+  S-BIAD922:
+    representative_image:
+      name: my_submission/Ext_Data_Fig_2/Ext_Data_Fig_2_c/1219 2WN2WT Proximal 6.czi
+    images_to_convert:
+      - name: my_submission/Ext_Data_Fig_2/Ext_Data_Fig_2_c/1219 2WN2WT Proximal 6.czi
+      - name: my_submission/Ext_Data_Fig_10/Ext_Data_Fig_10_a/112321 35dxAE M1C1.czi
+  S-BIAD968:
+    representative_image:
+      name: Images/Fig 4/G/sdn-QCP.tif
+    images_to_convert:
+      - name: Images/Fig 4/G/sdn-QCP.tif
+  S-BIAD978:
+    representative_image:
+      name: 1B - source images/CTRL - HC1/20220831_100105_721__WellC07_ChannelOrganoid_Seq0031_Z3_Organoid.tif_detected.png
+    images_to_convert:
+      - name: 1B - source images/CTRL - HC1/20220831_100105_721__WellC07_ChannelOrganoid_Seq0031_Z3_Organoid.tif_detected.png
+  S-BIAD987:
+    representative_image:
+      name: Day11/DMSO_asp_05_20221110.czi
+    images_to_convert:
+      - name: Day2/DMSO_asp_08_20230329.czi
+      - name: Day11/DMSO_asp_05_20221110.czi
