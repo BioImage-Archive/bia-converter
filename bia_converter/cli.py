@@ -8,8 +8,8 @@ from bia_converter.scli import rw_client, get_study_uuid_by_accession_id
 from bia_converter.utils import (
     create_and_persist_image_from_fileref,
     get_representation_by_type,
-    convert_by_accession_id_and_name,
-    create_thumbnail_by_accession_id_and_name,
+    convert_by_accession_id_and_image_descriptor,
+    create_thumbnail_by_accession_id_and_image_descriptor,
     create_representative_by_accession_id_and_name,
     ensure_unique_annotation_key_value
 )
@@ -56,11 +56,16 @@ def ensure_assigned(study_uuid: str, fileref_name: str):
 
 
 def execute_work_plan(work_plan):
-    rich.print(work_plan)
+    """Given a list of tuples of the form:
+    
+    (function, study accession ID, image descriptor)
+    
+    Run the function on each image descriptor
+    """
 
     funcs = [
-        create_thumbnail_by_accession_id_and_name,
-        convert_by_accession_id_and_name
+        create_thumbnail_by_accession_id_and_image_descriptor,
+        convert_by_accession_id_and_image_descriptor
     ]
 
     func_lookup = { func.__name__: func for func in funcs }
@@ -74,28 +79,26 @@ def execute_work_plan(work_plan):
 def convert(accession_id: str):
 
     logging.basicConfig(level=logging.INFO)
-    raw_config = load_config()
+
+    conversion_config = load_config()
+    study_settings = conversion_config.studies[accession_id]
+
     study_uuid = get_study_uuid_by_accession_id(accession_id)
 
-    study_settings = StudySettings.parse_obj(raw_config["studies"][accession_id])
+    if study_settings.conversion_settings.convert_all:
+        images_to_check = rw_client.get_study_images(study_uuid, limit=10**6)
+    else:
+        images_to_check = study_settings.images_to_convert
 
     work_plan = []
-    if study_settings.conversion_settings.convert_all:
-        all_images = rw_client.get_study_images(study_uuid, limit=10**6)
-        for image in all_images:
-            if not get_representation_by_type(study_uuid, image.name, rep_type="ome_ngff"):
-                work_plan.append(("convert_by_accession_id_and_name", accession_id, image.name))
-            if not get_representation_by_type(study_uuid, image.name, rep_type="thumbnail"):
-                work_plan.append(("create_thumbnail_by_accession_id_and_name", accession_id, image.name))
-    else:
-        images_to_check = raw_config["studies"][accession_id]["images_to_convert"]
 
-        for image in images_to_check:
-            if not get_representation_by_type(study_uuid, image["name"], rep_type="ome_ngff"):
-                ensure_assigned(study_uuid, image["name"])
-                work_plan.append(("convert_by_accession_id_and_name", accession_id, image["name"]))
-            if not get_representation_by_type(study_uuid, image["name"], rep_type="thumbnail"):
-                work_plan.append(("create_thumbnail_by_accession_id_and_name", accession_id, image["name"]))
+    # FIXME - conv targets
+    for image in images_to_check:
+        if not get_representation_by_type(study_uuid, image.name, rep_type="ome_ngff"):
+            ensure_assigned(study_uuid, image.name)
+            work_plan.append(("convert_by_accession_id_and_image_descriptor", accession_id, image))
+        if not get_representation_by_type(study_uuid, image.name, rep_type="thumbnail"):
+            work_plan.append(("create_thumbnail_by_accession_id_and_image_descriptor", accession_id, image))
 
     rich.print(work_plan)
     execute_work_plan(work_plan)
@@ -117,8 +120,6 @@ def assign(accession_id: str):
 
     raw_config = load_config()
 
-    fileref_name = raw_config["studies"][accession_id]["to_assign"][0]['name']
-
     study_uuid = get_study_uuid_by_accession_id(accession_id)
     for fileref in raw_config["studies"][accession_id]["to_assign"]:
         ensure_assigned(study_uuid, fileref["name"])
@@ -128,13 +129,28 @@ def assign(accession_id: str):
 def set_representative(accession_id: str):
     logging.basicConfig(level=logging.INFO)
 
-    study_uuid = get_study_uuid_by_accession_id(accession_id)
-
-    raw_config = load_config()
-    image_name = raw_config["studies"][accession_id]["representative_image"]['name']
+    conversion_config = load_config()
+    image_name = conversion_config.studies[accession_id].representative_image.name
 
     rep = ensure_representative_rep_exists(accession_id, image_name)
     ensure_unique_annotation_key_value(accession_id, "example_image_uri", rep.uri[0])
+
+
+#FIXME
+def clean():
+    # aws --endpoint https://uk1s3.embassy.ebi.ac.uk s3 rm s3://bia-integrator-data/S-BIAD606/1538da69-c145-4326-9a18-496c766af86e/1538da69-c145-4326-9a18-496c766af86e.zarr --recursive
+    pass
+
+
+@app.command()
+def check_config(accession_id: str):
+    raw_config = load_config()
+
+    print(raw_config["studies"][accession_id])
+
+
+# PycLit_InsVI_3_postMolt6_posBody.tif
+
 
 
 if __name__ == "__main__":

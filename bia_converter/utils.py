@@ -4,6 +4,7 @@ import hashlib
 import logging
 import tempfile
 
+import rich
 import bia_integrator_api.models as api_models
 
 from .io import upload_dirpath_as_zarr_image_rep, stage_fileref_and_get_fpath, copy_local_to_s3
@@ -93,6 +94,90 @@ def get_image_by_accession_id_and_name(accession_id: str, name: str):
         return None
 
 
+def check_for_uploaded_s3_zarr(accession_id, image):
+    import requests
+    from bia_converter.io import settings
+    base_uri = f"{settings.endpoint_url}/{settings.bucket_name}/{accession_id}/{image.uuid}/{image.uuid}.zarr"
+    attrs_uri = base_uri + "/.zattrs"
+    r = requests.head(attrs_uri)
+    if r.status_code == 200:
+        return base_uri
+    else:
+        return None
+
+
+def transpose_local_zarr(input_zarr_dirpath, output_zarr_dirpath, transpose_axes=(1, 2, 0, 3, 4)):
+    """Take Zarr image at the given local path, transpose the axes and return path
+    to the new Zarr image.
+    
+    By default will transpose T and Z axes.
+    """
+    import zarr
+    import dask.array as da
+
+    logger.info(f"Transposing from {input_zarr_dirpath} to {output_zarr_dirpath}")
+
+    k = '0'
+    output_store = zarr.DirectoryStore(output_zarr_dirpath, dimension_separator="/")
+
+    input_zgroup = zarr.open_group(input_zarr_dirpath)    
+    for k in input_zgroup.array_keys():
+        darray = da.from_zarr(input_zgroup[k])
+        transposed = darray.transpose(*transpose_axes)
+        rich.print(f"Transform {darray.shape} to {transposed.shape}")
+
+        da.to_zarr(transposed, output_store, component=k, overwrite=True)
+
+        # Copy metadata
+        m = input_zgroup.attrs.asdict()
+        output_zgroup = zarr.hierarchy.group(output_store)
+        output_zgroup.attrs.put(m)
+
+
+
+def convert_by_accession_id_and_image_descriptor(accession_id, image_target):
+    """Given the image descriptor, convert to OME-Zarr if not already converted and
+    copy to S3. Allows for options during conversion, e.g. transposition
+    of axes."""
+
+    image = get_image_by_accession_id_and_name(accession_id, image_target.name)
+    reps_by_type = {rep.type: rep for rep in image.representations}
+
+    rep = reps_by_type["fire_object"]
+    fileref_id = rep.attributes["fileref_ids"][0]
+    fileref = rw_client.get_file_reference(fileref_id)
+
+    input_fpath = stage_fileref_and_get_fpath(fileref)
+    zarr_fpath = cached_convert_to_zarr_and_get_fpath(image, input_fpath)
+
+    zarr_rep_uri = check_for_uploaded_s3_zarr(accession_id, image)
+    rich.print(f"Current zarr uri: {zarr_rep_uri}")
+
+    if not zarr_rep_uri:
+        if image_target.options.transpose_t_z:
+            input_dirpath = zarr_fpath / '0'
+            output_dirpath = zarr_fpath.parent / f"{zarr_fpath.stem}-transposed.zarr"
+            transpose_local_zarr(input_dirpath, output_dirpath)
+            zarr_to_upload = output_dirpath
+            path_in_zarr = ""
+        else:
+            zarr_to_upload = zarr_fpath
+            path_in_zarr = "/0"
+
+        zarr_rep_uri = upload_dirpath_as_zarr_image_rep(zarr_to_upload, accession_id, image.uuid)
+    
+        representation = api_models.BIAImageRepresentation(
+            size=0,
+            type="ome_ngff",
+            uri=[zarr_rep_uri + path_in_zarr],
+            dimensions=None,
+            rendering=None,
+            attributes={}
+        )
+
+        rw_client.create_image_representation(image.uuid, representation)
+
+
 def convert_by_accession_id_and_name(accession_id, image_name):
 
     image = get_image_by_accession_id_and_name(accession_id, image_name)
@@ -107,6 +192,7 @@ def convert_by_accession_id_and_name(accession_id, image_name):
 
     zarr_rep_uri = upload_dirpath_as_zarr_image_rep(zarr_fpath, accession_id, image.uuid)
 
+
     representation = api_models.BIAImageRepresentation(
         size=0,
         type="ome_ngff",
@@ -119,8 +205,10 @@ def convert_by_accession_id_and_name(accession_id, image_name):
     rw_client.create_image_representation(image.uuid, representation)
 
 
-def create_thumbnail_by_accession_id_and_name(accession_id, image_name):
-    image = get_image_by_accession_id_and_name(accession_id, image_name)
+def create_thumbnail_by_accession_id_and_image_descriptor(accession_id, image_descriptor):
+
+    image = get_image_by_accession_id_and_name(accession_id, image_descriptor.name)
+    
     reps_by_type = {rep.type: rep for rep in image.representations}
 
     rep = reps_by_type["ome_ngff"]
