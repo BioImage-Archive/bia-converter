@@ -164,7 +164,10 @@ def convert_by_accession_id_and_image_descriptor(accession_id, image_target):
             zarr_to_upload = zarr_fpath
             path_in_zarr = "/0"
 
-        zarr_rep_uri = upload_dirpath_as_zarr_image_rep(zarr_to_upload, accession_id, image.uuid)
+        upload_dirpath_as_zarr_image_rep(zarr_to_upload, accession_id, image.uuid)
+        zarr_rep_uri = check_for_uploaded_s3_zarr(accession_id, image)
+        if not zarr_rep_uri:
+            raise TypeError("Something went wrong during AWS upload - check aws command?")
     
         representation = api_models.BIAImageRepresentation(
             size=0,
