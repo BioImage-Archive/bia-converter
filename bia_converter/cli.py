@@ -149,7 +149,56 @@ def check_config(accession_id: str):
     print(raw_config["studies"][accession_id])
 
 
-# PycLit_InsVI_3_postMolt6_posBody.tif
+def get_easily_convertable_exts():
+    from importlib import resources
+    from . import data
+    formats_fname = "bioformats_curated_single_file_formats.txt"
+    formats_list_fpath = resources.files(data) / formats_fname
+    easily_convertable_exts = { l for l in formats_list_fpath.read_text().split("\n") if len(l) > 0 }
+
+    return easily_convertable_exts
+
+
+@app.command()
+def propose(accession_id: str):
+    limit = 10 ** 4
+    study_obj_info = rw_client.get_object_info_by_accession([accession_id]).pop()
+    filerefs = rw_client.get_study_file_references(study_obj_info.uuid, limit=limit)
+
+    from pathlib import Path
+
+    n = 3
+    exclude_exts = { '.raw' }
+
+    exts = get_easily_convertable_exts() - exclude_exts
+
+    eligible = [
+        fileref
+        for fileref in filerefs
+        if Path(fileref.name).suffix in exts 
+    ]
+    # eligible.sort(key= lambda f: f.uuid)
+    eligible.sort(key=lambda f: f.size_in_bytes, reverse=True)
+    # rich.print(eligible)
+    selected = eligible[:n]
+
+    from .config import ImageToConvert, StudySettings
+
+    images_to_convert = [
+        ImageToConvert(name=s.name)
+        for s in selected
+    ]
+    st = StudySettings(
+        images_to_convert=images_to_convert,
+        representative_image=images_to_convert[0]
+    )
+    tld = {accession_id: st.dict()}
+
+    import sys
+    from ruamel.yaml import YAML
+    yaml = YAML()
+    yaml.dump(tld, sys.stdout)
+
 
 
 
