@@ -3,6 +3,20 @@ defaults:
     - ome_ngff
     - thumbnail
 studies:
+  S-BSST223:
+    representative_image:
+      name: Figure_1.lif
+    images_to_convert:
+     - name: Figure_1.lif
+  S-BSST429:
+    representative_image:
+      name: P400 LM/Fish_1/Fish_1_section1_20x.lsm
+    images_to_convert:
+    - name: P400 LM/Fish_1/Fish_1_section1_20x.lsm
+      options:
+        transpose_t_z: false
+    conversion_settings:
+      convert_all: false
   S-BIAD582:
     representative_image:
       name: 18_wt_wg488-en546-slp594-odd647/mps/10a_18_wt_wg488-en546-slp594-odd647_019_mp.tif
@@ -33,12 +47,22 @@ studies:
       name: Figur1P and 1Q-BC patient tumor microarray/Figure 1P-colocalization for EglN1 and TOM20 images/F9/F9-2.tif
     images_to_convert:
       - name: Figur1P and 1Q-BC patient tumor microarray/Figure 1P-colocalization for EglN1 and TOM20 images/F9/F9-2.tif
+  S-BIAD826:
+    representative_image:
+      name: RNAscope/MB299/RawData_Microscopy/MB299_R2_DAPI.tif
+    images_to_convert:
+      - name: RNAscope/MB299/RawData_Microscopy/MB299_R2_DAPI.tif
   S-BIAD886:
     representative_image:
       name: claudin_atoh/20220813_1_wt/20220813_1-O2_wt/20220813_1-O2_wt.tiff
     images_to_convert:
       - name: claudin_atoh/20220813_1_wt/20220813_1-O2_wt/20220813_1-O2_wt.tiff
       - name: claudin_atoh/20220813_1_wt/20220813_1-OP1_wt/20220813_1-OP1_wt.czi
+  S-BIAD901:
+    representative_image:
+      name: ImageData/Figure 1/1C/DC nucleokinesis collagen.tif
+    images_to_convert:
+      - name: ImageData/Figure 1/1C/DC nucleokinesis collagen.tif
   S-BIAD963:
     representative_image:
       name: Fig3a/MAX_Mag20x_Tile0_Ch638_Sh0_Rot0.tif
@@ -60,11 +84,54 @@ studies:
     images_to_convert:
       - name: my_submission/Ext_Data_Fig_2/Ext_Data_Fig_2_c/1219 2WN2WT Proximal 6.czi
       - name: my_submission/Ext_Data_Fig_10/Ext_Data_Fig_10_a/112321 35dxAE M1C1.czi
+  S-BIAD928:
+    representative_image:
+      name:
+        Figure/Fig_4/Fig_4C_data/2019-12-12_lat2_sih_zo1_fixed_48hpf_lat2_sih-_3_48hpf/2019-12-12_lat2_sih_zo1_fixed_48hpf_lat2_sih-_3_48hpf_stack.tif
+      options:
+        transpose_t_z: false
+    images_to_convert:
+    - name:
+        Figure/Fig_4/Fig_4C_data/2019-12-12_lat2_sih_zo1_fixed_48hpf_lat2_sih-_3_48hpf/2019-12-12_lat2_sih_zo1_fixed_48hpf_lat2_sih-_3_48hpf_stack.tif
+      options:
+        transpose_t_z: false
+    - name: Figure/Fig_6/Fig_6N_data/C2-Project.lif - Control si 2 static1:Control si
+        2 static1_Merging.tif
+      options:
+        transpose_t_z: false
+    - name:
+        Figure/Fig_4/Fig_4C_data/2019-12-12_lat2_sih_zo1_fixed_48hpf_control_sih-_3_48hpf/2019-12-12_lat2_sih_zo1_fixed_48hpf_control_sih-_3_48hpf_stack.tif
+      options:
+        transpose_t_z: false
+    conversion_settings:
+      convert_all: false
+  S-BIAD954:
+    representative_image:
+      name: Component_1/F05_25062021_SU4312_0-96hpf_Replikat2__W__1_1.bmp
+      options:
+        transpose_t_z: false
+    images_to_convert:
+    - name: Component_1/F05_25062021_SU4312_0-96hpf_Replikat2__W__1_1.bmp
+      options:
+        transpose_t_z: false
+    - name: Component_1/A06_15032021_SU5416_0-96hpf__W__1_4.bmp
+      options:
+        transpose_t_z: false
+    - name: Component_1/F01_20210115_Sorafenib0-96hpf__W__1_4.bmp
+      options:
+        transpose_t_z: false
+    conversion_settings:
+      convert_all: false
   S-BIAD968:
     representative_image:
       name: Images/Fig 4/G/sdn-QCP.tif
     images_to_convert:
       - name: Images/Fig 4/G/sdn-QCP.tif
+  S-BIAD976:
+    representative_image:
+      name: NeuroConnectivity_Func/Rep1/repl1_17_G06.tif
+    images_to_convert:
+      - name: NeuroConnectivity_Func/Rep1/repl1_17_G06.tif
   S-BIAD978:
     representative_image:
       name: 1B - source images/CTRL - HC1/20220831_100105_721__WellC07_ChannelOrganoid_Seq0031_Z3_Organoid.tif_detected.png
@@ -76,3 +143,30 @@ studies:
     images_to_convert:
       - name: Day2/DMSO_asp_08_20230329.czi
       - name: Day11/DMSO_asp_05_20221110.czi
+  S-BIAD988:
+    representative_image:
+      name: "Raw Dataset/Figure 1 3 EV1 2 4 S1/Aurora A/Cycle 13/Victoria_06.mvd2 - embryo_005.tif"
+    images_to_convert:
+      - name: "Raw Dataset/Figure 1 3 EV1 2 4 S1/Aurora A/Cycle 13/Victoria_06.mvd2 - embryo_005.tif"
+  S-BIAD993:
+    representative_image:
+      name: Metabolite_Imaging/Kidney_MSI/Img79_kidney_mz217pt0832_glutamylalanine.jpeg
+    images_to_convert:
+      - name: Metabolite_Imaging/Kidney_MSI/Img79_kidney_mz217pt0832_glutamylalanine.jpeg
+      - name: Metabolite_Imaging/Liver_MSI/Img43_liver_mz193pt0255_glucuronic_acid.jpeg
+      - name: Metabolite_Imaging/Brain_MSI/Coronal/Img47_brain_coronal_mz184pt0016_phosphoserine.jpeg
+  S-BIAD999:
+    representative_image:
+      name: __Laundon_Placental_Villus_Data/Fig_1_Data/Whole Tissue Pieces/DONKEY_2_microCT.tif
+    images_to_convert:
+      - name: __Laundon_Placental_Villus_Data/Fig_2_Data/2D EM cross sections/HUMAN_2_EM.tif
+      - name: __Laundon_Placental_Villus_Data/Fig_1_Data/Whole Tissue Pieces/DONKEY_1_microCT.tif
+      - name: __Laundon_Placental_Villus_Data/Fig_1_Data/Whole Tissue Pieces/DONKEY_2_microCT.tif
+        options:
+          transpose_t_z: True
+  S-BIAD1008:
+    representative_image:
+      name: Dpp paper data/Fig4/Control_0D/5.czi
+    images_to_convert:
+      - name: Dpp paper data/Fig4/Control_0D/5.czi
+      - name: Dpp paper data/Fig4/Control_3D/Unprocessed/6.czi
