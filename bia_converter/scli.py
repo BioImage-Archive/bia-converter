@@ -34,3 +34,20 @@ def get_study_uuid_by_accession_id(accession_id: str):
     study_uuid = study_obj[0].uuid
 
     return study_uuid
+
+
+def get_image_by_name(study_uuid, image_name):
+
+    import bia_integrator_api.models as api_models
+
+    search_filter = api_models.SearchImageFilter(
+        study_uuid=study_uuid,
+        original_relpath=image_name
+    )
+
+    images = rw_client.search_images_exact_match(search_filter)
+
+    if len(images) > 0:
+        return images[0]
+    else:
+        return None

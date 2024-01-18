@@ -28,7 +28,9 @@ class ConversionOptions(BaseModel):
 
 
 class ImageToConvert(BaseModel):
-    name: str
+    label: str | None
+    name: str | None
+    pattern: str | None
     options: ConversionOptions = ConversionOptions()
 
 

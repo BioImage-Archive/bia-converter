@@ -3,14 +3,17 @@ import uuid
 import hashlib
 import logging
 import tempfile
+from pathlib import Path
 
 import rich
 import bia_integrator_api.models as api_models
 
 from .io import upload_dirpath_as_zarr_image_rep, stage_fileref_and_get_fpath, copy_local_to_s3
 from .scli import rw_client, get_study_uuid_by_accession_id
+from .config import settings
+from .models import StructuredFileset
 from .rendering import generate_padded_thumbnail_from_ngff_uri
-from .conversion import cached_convert_to_zarr_and_get_fpath
+from .conversion import cached_convert_to_zarr_and_get_fpath, run_zarr_conversion
 
 
 logger = logging.getLogger(__name__)
@@ -134,6 +137,104 @@ def transpose_local_zarr(input_zarr_dirpath, output_zarr_dirpath, transpose_axes
         output_zgroup.attrs.put(m)
 
 
+def fileref_map_to_pattern(fileref_map, ext):
+    """Determine the pattern needed to enable bioformats to load the components
+    of a structured fileset, e.g. for conversion."""
+
+    all_positions = list(fileref_map.values())
+    tvals, cvals, zvals = zip(*all_positions)
+
+    zmin = min(zvals)
+    zmax = max(zvals)
+    cmin = min(cvals)
+    cmax = max(cvals)
+    tmin = min(tvals)
+    tmax = max(tvals)
+
+    pattern = f"T<{tmin:04d}-{tmax:04d}>_C<{cmin:04d}-{cmax:04d}>_Z<{zmin:04d}-{zmax:04d}>{ext}"
+
+    return pattern
+
+
+def convert_from_structured_fileset_rep(accession_id, image, image_target, rep):
+
+    cached_convert_from_structured_fileset(accession_id, image, image_target, rep)
+
+
+def cached_convert_from_structured_fileset(accession_id, image, image_target, image_rep):
+
+    study_uuid = get_study_uuid_by_accession_id(accession_id)
+
+    sf = StructuredFileset.parse_obj(image_rep.attributes['structured_fileset'])
+
+    tmpdir_obj = tempfile.TemporaryDirectory()
+    tmpdir_path = Path(tmpdir_obj.name)
+
+    file_references = rw_client.get_study_file_references(study_uuid, limit=10000)
+    file_references_by_uuid = {fileref.uuid: fileref for fileref in file_references}
+
+    for fileref_id, position in sf.fileref_map.items():
+        t, c, z = position
+        label = "T{t:04d}_C{c:04d}_Z{z:04d}".format(z=z, c=c, t=t)
+
+        fileref = file_references_by_uuid[fileref_id]
+        input_fpath = stage_fileref_and_get_fpath(fileref)
+
+        suffix = input_fpath.suffix
+
+        target_path = tmpdir_path/(label+suffix)
+        logger.info(f"Linking {input_fpath} as {target_path}")
+
+        target_path.symlink_to(input_fpath)
+
+    extension = sf.attributes['extension']
+
+    pattern = fileref_map_to_pattern(sf.fileref_map, extension)
+
+    rich.print(pattern)
+
+    pattern_fpath = tmpdir_path / "conversion.pattern"
+    logger.info(f"Using pattern {pattern}")
+    pattern_fpath.write_text(pattern)
+
+    dst_dir_basepath = settings.cache_root_dirpath/"zarr"
+    dst_dir_basepath.mkdir(exist_ok=True, parents=True)
+    zarr_fpath = dst_dir_basepath/f"{image.uuid}.zarr"
+    logger.info(f"Destination fpath: {zarr_fpath}")
+    if not zarr_fpath.exists():
+        run_zarr_conversion(pattern_fpath, zarr_fpath)
+
+
+    zarr_rep_uri = check_for_uploaded_s3_zarr(accession_id, image)
+    rich.print(f"Current zarr uri: {zarr_rep_uri}")
+
+    if not zarr_rep_uri:
+        if image_target.options.transpose_t_z:
+            input_dirpath = zarr_fpath / '0'
+            output_dirpath = zarr_fpath.parent / f"{zarr_fpath.stem}-transposed.zarr"
+            transpose_local_zarr(input_dirpath, output_dirpath)
+            zarr_to_upload = output_dirpath
+            path_in_zarr = ""
+        else:
+            zarr_to_upload = zarr_fpath
+            path_in_zarr = "/0"
+
+        upload_dirpath_as_zarr_image_rep(zarr_to_upload, accession_id, image.uuid)
+        zarr_rep_uri = check_for_uploaded_s3_zarr(accession_id, image)
+        if not zarr_rep_uri:
+            raise TypeError("Something went wrong during AWS upload - check aws command?")
+    
+        representation = api_models.BIAImageRepresentation(
+            size=0,
+            type="ome_ngff",
+            uri=[zarr_rep_uri + path_in_zarr],
+            dimensions=None,
+            rendering=None,
+            attributes={}
+        )
+
+        rw_client.create_image_representation(image.uuid, representation)
+
 
 def convert_by_accession_id_and_image_descriptor(accession_id, image_target):
     """Given the image descriptor, convert to OME-Zarr if not already converted and
@@ -143,7 +244,24 @@ def convert_by_accession_id_and_image_descriptor(accession_id, image_target):
     image = get_image_by_accession_id_and_name(accession_id, image_target.name)
     reps_by_type = {rep.type: rep for rep in image.representations}
 
-    rep = reps_by_type["fire_object"]
+    conversion_funcs = {
+        "fire_obj": convert_from_fire_obj_rep,
+        "structured_fileset": convert_from_structured_fileset_rep
+    }
+
+    convertible_reps = set(reps_by_type) & set(conversion_funcs)
+
+    assert len(convertible_reps), "No convertible representation for this image"
+
+    chosen_rep_type = list(convertible_reps)[0]
+    conversion_func = conversion_funcs[chosen_rep_type]
+    chosen_rep = reps_by_type[chosen_rep_type]
+
+    conversion_func(accession_id, image, image_target, chosen_rep)
+
+
+
+def convert_from_fire_obj_rep(accession_id, image, image_target, rep):
     fileref_id = rep.attributes["fileref_ids"][0]
     fileref = rw_client.get_file_reference(fileref_id)
 
