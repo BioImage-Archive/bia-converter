@@ -3,6 +3,22 @@ defaults:
     - ome_ngff
     - thumbnail
 studies:
+  EMPIAR-10994:
+    representative_image:
+      name: 160621_HeLa_Control/01_original_images/r01a_BSED_roi_00
+    images_to_convert:
+      - pattern: "160621_HeLa_Control/01_original_images/r01a_BSED_roi_00_slice_{z:d}.dm4"
+        name: 160621_HeLa_Control/01_original_images/r01a_BSED_roi_00
+      - pattern: "160621_HeLa_Control/01_original_images/r01b_BSED_roi_00_slice_{z:d}.dm4"
+        name: 160621_HeLa_Control/01_original_images/r01b_BSED_roi_00
+  EMPIAR-11369:
+    images_to_convert:
+      - pattern: Ungerminated/Prefix_OnPoint_slice_{z:d}.tif
+        name: Ungerminated/Prefix_OnPoint
+  EMPIAR-11759:
+    images_to_convert:
+      - pattern: "F57-8_test1_3VBSED_slice_{z:d}.dm3"
+        name: F57-8_test1_3VBSED.dm3
   S-BSST223:
     representative_image:
       name: Figure_1.lif
@@ -170,3 +186,10 @@ studies:
     images_to_convert:
       - name: Dpp paper data/Fig4/Control_0D/5.czi
       - name: Dpp paper data/Fig4/Control_3D/Unprocessed/6.czi
+  S-BIAD1015:
+    representative_image:
+      name: Priapulopsis-bicaudata_04X_40kV_3W_bin2_9sec_LE2_1601p_recon
+    images_to_convert:
+      # - pattern: "F57-8_test1_3VBSED_slice_{z:d}.dm3"
+      - pattern: "TIFF_stack/Priapulopsis-bicaudata_04X_40kV_3W_bin2_9sec_LE2_1601p_recon{z:d}.tiff"
+        label: Priapulopsis-bicaudata_04X_40kV_3W_bin2_9sec_LE2_1601p_recon
