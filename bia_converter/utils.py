@@ -191,8 +191,6 @@ def cached_convert_from_structured_fileset(accession_id, image, image_target, im
 
     pattern = fileref_map_to_pattern(sf.fileref_map, extension)
 
-    rich.print(pattern)
-
     pattern_fpath = tmpdir_path / "conversion.pattern"
     logger.info(f"Using pattern {pattern}")
     pattern_fpath.write_text(pattern)
@@ -203,7 +201,6 @@ def cached_convert_from_structured_fileset(accession_id, image, image_target, im
     logger.info(f"Destination fpath: {zarr_fpath}")
     if not zarr_fpath.exists():
         run_zarr_conversion(pattern_fpath, zarr_fpath)
-
 
     zarr_rep_uri = check_for_uploaded_s3_zarr(accession_id, image)
     rich.print(f"Current zarr uri: {zarr_rep_uri}")
@@ -245,13 +242,17 @@ def convert_by_accession_id_and_image_descriptor(accession_id, image_target):
     reps_by_type = {rep.type: rep for rep in image.representations}
 
     conversion_funcs = {
-        "fire_obj": convert_from_fire_obj_rep,
+        "fire_object": convert_from_fire_obj_rep,
         "structured_fileset": convert_from_structured_fileset_rep
     }
 
     convertible_reps = set(reps_by_type) & set(conversion_funcs)
 
-    assert len(convertible_reps), "No convertible representation for this image"
+    if not len(convertible_reps):
+        rich.print(f"No convertible reps from {reps_by_type}")
+
+        import sys; sys.exit(0)
+    # assert len(convertible_reps), "No convertible representation for this image"
 
     chosen_rep_type = list(convertible_reps)[0]
     conversion_func = conversion_funcs[chosen_rep_type]
@@ -428,3 +429,24 @@ def ensure_unique_annotation_key_value(accession_id: str, key, value):
             study.version += 1
 
             rw_client.update_study(study)
+
+
+def replace_with_local_fpath(image_id: str, local_fpath: Path):
+    image = rw_client.get_image(image_id)
+    # zarr_rep_uri = upload_dirpath_as_zarr_image_rep(zarr_fpath, accession_id, image.uuid)
+
+    # rich.print(image)
+
+    study = rw_client.get_study(image.study_uuid)
+
+    # rich.print(study)
+
+    # zarr_rep_uri = upload_dirpath_as_zarr_image_rep(local_fpath, study.accession_id, image.uuid)
+
+    # get_representation_by_type()
+
+    rep_type = "ome_ngff"
+    reps_by_type = {rep.type: rep for rep in image.representations}
+    ngff_rep = reps_by_type[rep_type]
+
+    rich.print(ngff_rep)
