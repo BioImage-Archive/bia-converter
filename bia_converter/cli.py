@@ -121,8 +121,8 @@ def assign(accession_id: str):
     raw_config = load_config()
 
     study_uuid = get_study_uuid_by_accession_id(accession_id)
-    for fileref in raw_config["studies"][accession_id]["to_assign"]:
-        ensure_assigned(study_uuid, fileref["name"])
+    for image_to_convert in raw_config.studies[accession_id].images_to_convert:
+        ensure_assigned(study_uuid, image_to_convert.name)
 
 
 @app.command()
