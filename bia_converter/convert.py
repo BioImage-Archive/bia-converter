@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 import rich
+import parse # type: ignore
 from bia_integrator_api.models import ( # type: ignore
     ImageRepresentation, ImageRepresentationUseType
 )
@@ -10,10 +11,14 @@ from bia_shared_datamodels.uuid_creation import ( # type: ignore
     create_image_representation_uuid
 )
 
-from .io import copy_local_to_s3
+from .io import copy_local_to_s3, stage_fileref_and_get_fpath, sync_dirpath_to_s3
+from .conversion import run_zarr_conversion
 from .bia_api_client import api_client, store_object_in_api_idempotent
 from .rendering import generate_padded_thumbnail_from_ngff_uri
-from .utils import create_s3_uri_suffix_for_image_representation
+from .utils import (
+    create_s3_uri_suffix_for_image_representation,
+    attributes_by_name, get_dir_size
+)
 
 
 logger = logging.getLogger(__file__)
@@ -51,24 +56,22 @@ def create_2d_image_and_upload_to_s3(ome_zarr_uri, dims, dst_key):
     return file_uri, size_in_bytes
 
 
-def convert_interactive_display_to_thumbnail(input_imagerep_uuid: str, dims=(256, 256)):
+def convert_interactive_display_to_thumbnail(input_image_rep: ImageRepresentation) -> ImageRepresentation:
     # Should convert an INTERACTIVE_DISPLAY rep, to a THUMBNAIL rep
 
-    # Retrieve and check the image rep
-    input_image_rep = api_client.get_image_representation(input_imagerep_uuid)
+    dims = (256, 256)
+    # Check the image rep
     assert input_image_rep.use_type == ImageRepresentationUseType.INTERACTIVE_DISPLAY
 
     # Retrieve model ibjects
     input_image = api_client.get_image(input_image_rep.representation_of_uuid)
-    dataset = api_client.get_dataset(input_image.submission_dataset_uuid)
-    study = api_client.get_study(dataset.submitted_in_study_uuid)
 
     base_image_rep = create_image_representation_object(input_image, ".png", "THUMBNAIL")
     w, h = dims
     base_image_rep.size_x = w
     base_image_rep.size_y = h
 
-    dst_key = create_s3_uri_suffix_for_image_representation(study.accession_id, base_image_rep)
+    dst_key = create_s3_uri_suffix_for_image_representation(base_image_rep)
     file_uri, size_in_bytes = create_2d_image_and_upload_to_s3(input_image_rep.file_uri[0], dims, dst_key)
 
     base_image_rep.file_uri = [file_uri]
@@ -79,29 +82,209 @@ def convert_interactive_display_to_thumbnail(input_imagerep_uuid: str, dims=(256
     return base_image_rep
 
 
-def convert_interactive_display_to_static_display(input_imagerep_uuid: str, dims=(512, 512)):
+# TODO - should be able to merge these
+def convert_interactive_display_to_static_display(input_image_rep: ImageRepresentation) -> ImageRepresentation:
     # Should convert an INTERACTIVE_DISPLAY rep, to a STATIC_DISPLAY rep
 
-    # Retrieve and check the image rep
-    input_image_rep = api_client.get_image_representation(input_imagerep_uuid)
+    dims = (512, 512)
+    # Check the image rep
     assert input_image_rep.use_type == ImageRepresentationUseType.INTERACTIVE_DISPLAY
 
     # Retrieve model ibjects
     input_image = api_client.get_image(input_image_rep.representation_of_uuid)
-    dataset = api_client.get_dataset(input_image.submission_dataset_uuid)
-    study = api_client.get_study(dataset.submitted_in_study_uuid)
 
     base_image_rep = create_image_representation_object(input_image, ".png", "STATIC_DISPLAY")
     w, h = dims
     base_image_rep.size_x = w
     base_image_rep.size_y = h
 
-    dst_key = create_s3_uri_suffix_for_image_representation(study.accession_id, base_image_rep)
+    dst_key = create_s3_uri_suffix_for_image_representation(base_image_rep)
     file_uri, size_in_bytes = create_2d_image_and_upload_to_s3(input_image_rep.file_uri[0], dims, dst_key)
 
     base_image_rep.file_uri = [file_uri]
     base_image_rep.total_size_in_bytes = size_in_bytes
 
+    store_object_in_api_idempotent(base_image_rep)
+
+    return base_image_rep
+
+
+def get_all_file_references_for_image(image):
+    file_references = []
+    for fr_uuid in image.original_file_reference_uuid:
+        fr = api_client.get_file_reference(fr_uuid)
+        file_references.append(fr)
+
+    return file_references
+
+
+def fileref_map_to_bfconvert_pattern(fileref_map, ext):
+    """Determine the pattern needed to enable bioformats to load the components
+    of a structured fileset, e.g. for conversion."""
+
+    all_positions = list(fileref_map.values())
+    tvals, cvals, zvals = zip(*all_positions)
+
+    zmin = min(zvals)
+    zmax = max(zvals)
+    cmin = min(cvals)
+    cmax = max(cvals)
+    tmin = min(tvals)
+    tmax = max(tvals)
+
+    pattern = f"T<{tmin:04d}-{tmax:04d}>_C<{cmin:04d}-{cmax:04d}>_Z<{zmin:04d}-{zmax:04d}>{ext}"
+
+    return pattern
+
+
+def find_file_references_matching_template(file_references, parse_template):
+    """
+    Match file references against a parsing template to extract dimensional information.
+    
+    Iterates through file references and attempts to extract plane (z), time point (t),
+    and channel (c) information from their file paths using the provided template.
+    
+    Args:
+        file_references: Iterable of FileReference objects containing file_path attributes
+        parse_template: String template for parse.parse() with optional named fields 'z', 't', 'c'
+    
+    Returns:
+        tuple: (
+            list of matched FileReference objects,
+            dict mapping FileReference UUIDs to tuples of (t, c, z) coordinates
+        )
+        
+    Example:
+        file_refs = [FileReference(file_path="image_z01_t02_c03.tif"), ...]
+        template = "image_z{z:d}_t{t:d}_c{c:d}.tif"
+        matched_refs, coord_map = find_file_references_matching_template(file_refs, template)
+        # coord_map[ref.uuid] = (2, 3, 1)  # (t, c, z)
+    """
+
+    fileref_map = {}
+    selected_filerefs = []
+    for fileref in file_references:
+        result = parse.parse(parse_template, fileref.file_path)
+        if result:
+            z = result.named.get('z', 0)
+            c = result.named.get('c', 0)
+            t = result.named.get('t', 0)
+            fileref_map[fileref.uuid] = (t, c, z)
+            selected_filerefs.append(fileref)
+
+    return selected_filerefs, fileref_map
+
+
+def get_shared_extension(filerefs):
+    """Get the single shared file extension from a set of file references. If it is not
+    unique, fail."""
+
+    extensions = {Path(fileref.file_path).suffix for fileref in filerefs}
+    assert len(extensions) == 1
+    extension = extensions.pop()
+
+    return extension
+
+
+def stage_and_link_filerefs(tmpdirname, file_references, fileref_coords_map, bfconvert_pattern):
+    """Stage necessary file references to a temporary directory, and symlink them so
+    they can be converted with a single command."""
+
+    tmpdir_path = Path(tmpdirname)
+
+    file_references_by_uuid = {fr.uuid: fr for fr in file_references}
+    for fileref_id, position in fileref_coords_map.items():
+        t, c, z = position
+        label = "T{t:04d}_C{c:04d}_Z{z:04d}".format(z=z, c=c, t=t)
+
+        fileref = file_references_by_uuid[fileref_id]
+        input_fpath = stage_fileref_and_get_fpath(fileref)
+
+        suffix = input_fpath.suffix
+
+        target_path = tmpdir_path/(label+suffix)
+        logger.info(f"Linking {input_fpath} as {target_path}")   
+        target_path.symlink_to(input_fpath)
+
+    pattern_fpath = tmpdir_path / "conversion.pattern"
+    pattern_fpath.write_text(bfconvert_pattern)
+
+    return pattern_fpath
+
+
+def get_conversion_output_path(output_rep_uuid):
+   
+    from .config import settings
+    dst_dir_basepath = settings.cache_root_dirpath/"zarr"
+    dst_dir_basepath.mkdir(exist_ok=True, parents=True)
+    zarr_fpath = dst_dir_basepath/f"{output_rep_uuid}.zarr"
+
+    return zarr_fpath
+
+
+def get_dimensions_dict_from_zarr(ome_zarr_fpath: Path):
+
+    from .proxyimage import ome_zarr_image_from_ome_zarr_uri
+    im = ome_zarr_image_from_ome_zarr_uri(ome_zarr_fpath / '0')
+    attr_map = {
+        'sizeX': 'size_x',
+        'sizeY': 'size_y',
+        'sizeZ': 'size_z',
+        'sizeC': 'size_c',
+        'sizeT': 'size_t',
+        'PhysicalSizeX': 'physical_size_x',
+        'PhysicalSizeY': 'physical_size_y',
+        'PhysicalSizeZ': 'physical_size_z',
+    }
+
+    update_dict = {v: im.__dict__[k] for k, v in attr_map.items()} 
+
+    return update_dict
+
+
+def convert_uploaded_by_submitter_to_interactive_display(input_image_rep: ImageRepresentation) -> ImageRepresentation:
+    # Should convert an UPLOADED_BY_SUBMITTER rep, to an INTERACTIVE_DISPLAY rep
+
+    assert input_image_rep.use_type == ImageRepresentationUseType.UPLOADED_BY_SUBMITTER
+
+    image = api_client.get_image(input_image_rep.representation_of_uuid)
+    base_image_rep = create_image_representation_object(image, ".ome.zarr", "INTERACTIVE_DISPLAY")
+
+    # Get the file references we'll need
+    file_references = get_all_file_references_for_image(image)
+
+    # Extract the pattern used to match which files to convert, and construct a map that related
+    # file references to image coordinates
+    attrs = attributes_by_name(input_image_rep)
+    parse_template = attrs['file_pattern']['file_pattern']
+    selected_filerefs, fileref_coords_map = find_file_references_matching_template(file_references, parse_template)
+    extension = get_shared_extension(selected_filerefs)
+    bfconvert_pattern = fileref_map_to_bfconvert_pattern(fileref_coords_map, extension)
+    logger.info(f"Convert with: {bfconvert_pattern}")
+
+    # Fetch the file references to local cache, and link them in the correct structure for conversion
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        conversion_input_fpath = stage_and_link_filerefs(tmpdirname, selected_filerefs, fileref_coords_map, bfconvert_pattern)
+
+        # Run the conversion if we need to
+        output_zarr_fpath = get_conversion_output_path(base_image_rep.uuid)
+        logger.info(f"Converting from {conversion_input_fpath} to {output_zarr_fpath}")
+        if not output_zarr_fpath.exists():
+            run_zarr_conversion(conversion_input_fpath, output_zarr_fpath)
+
+    # Upload to S3
+    dst_suffix = create_s3_uri_suffix_for_image_representation(base_image_rep)
+    zarr_group_uri = sync_dirpath_to_s3(output_zarr_fpath, dst_suffix)
+    ome_zarr_uri = zarr_group_uri + '/0'
+
+    # Set image_rep properties that we now know
+    # base_image_rep.file_uri = 
+    base_image_rep.total_size_in_bytes = get_dir_size(output_zarr_fpath)
+    base_image_rep.file_uri = [ome_zarr_uri]
+    update_dict = get_dimensions_dict_from_zarr(output_zarr_fpath)
+    base_image_rep.__dict__.update(update_dict)
+
+    # Write back to API
     store_object_in_api_idempotent(base_image_rep)
 
     return base_image_rep

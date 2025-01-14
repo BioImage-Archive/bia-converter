@@ -2,8 +2,7 @@ from pathlib import Path
 import logging
 import shutil
 import subprocess
-import tempfile
-from urllib.parse import urlparse
+from urllib.parse import quote
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -13,6 +12,22 @@ from .config import settings
 
 
 logger = logging.getLogger(__name__)
+
+
+def sync_dirpath_to_s3(src_dirpath, dst_suffix):
+
+    bucket_name = settings.bucket_name
+    logger.info(f"Uploading to bucket {bucket_name} with suffix {dst_suffix}")
+
+    dst_key = f"{bucket_name}/{dst_suffix}"
+
+    cmd = f'aws --region us-east-1 --endpoint-url {settings.endpoint_url} s3 sync "{src_dirpath}/" s3://{dst_key} --acl public-read'
+    logger.info(f"Uploading using command {cmd}")
+    subprocess.run(cmd, shell=True)
+
+    uri = f"{settings.endpoint_url}/{dst_key}"
+
+    return uri
 
 
 def upload_dirpath_as_zarr_image_rep(src_dirpath, accession_id, image_id, image_rep_id):
@@ -37,7 +52,7 @@ def copy_uri_to_local(src_uri: str, dst_fpath: Path):
     session = requests.Session()
     retries = Retry(
         total=3,  # number of retries
-        backoff_factor=0.3,  # delay factor between retries
+        backoff_factor=0.3,  # delay factor between retries # type: ignore
         status_forcelist=[500, 502, 503, 504],  # HTTP status codes to retry
         allowed_methods=frozenset({'GET', 'HEAD', 'OPTIONS'})
     )
@@ -54,7 +69,7 @@ def copy_uri_to_local(src_uri: str, dst_fpath: Path):
         with session.get(src_uri, stream=True) as r:
             r.raise_for_status()
             with open(temp_file, 'wb') as fh:
-                shutil.copyfileobj(r.raw, fh)
+                shutil.copyfileobj(r.raw, fh) # type: ignore
         
         # If download completed successfully, rename temp file
         temp_file.rename(dst_fpath)
@@ -87,16 +102,29 @@ def copy_local_to_s3(src_fpath: Path, dst_key: str) -> str:
 
     return f"{endpoint_url}/{bucket_name}/{dst_key}"
 
+def encode_url(url):
+    # Split into base and path components to preserve the :// 
+    if '://' in url:
+        base, path = url.split('://', 1)
+        # Encode the path portion, preserving forward slashes
+        encoded_path = quote(path, safe='/') 
+        return f"{base}://{encoded_path}"
+    else:
+        # If no protocol specified, encode the whole string
+        return quote(url)
+
 
 def fetch_fileref_to_local(fileref, dst_fpath, max_retries=3):
     # if fileref.type == "file_in_zip":
     #     raise NotImplementedError
     # else:
         # Check size after download and retry if necessary
-    expected_size = requests.header(fileref.uri)["content-length"] if fileref.size_in_bytes == 0 else fileref.size_in_bytes
+
+    encoded_uri = encode_url(fileref.uri)
+    expected_size = requests.header(encoded_uri)["content-length"] if fileref.size_in_bytes == 0 else fileref.size_in_bytes # type: ignore
     for attempt in range(1, max_retries+1):
         try:
-            copy_uri_to_local(fileref.uri, dst_fpath)
+            copy_uri_to_local(encoded_uri, dst_fpath)
             download_size = dst_fpath.stat().st_size
             if download_size == expected_size:
                 break
@@ -116,7 +144,7 @@ def stage_fileref_and_get_fpath(fileref) -> Path:
     cache_dirpath = settings.cache_root_dirpath/"files"
     cache_dirpath.mkdir(exist_ok=True, parents=True)
 
-    suffix = Path(urlparse(fileref.file_path).path).suffix
+    suffix = Path(fileref.file_path).suffix
     dst_fname = fileref.uuid+suffix
     dst_fpath = cache_dirpath/dst_fname
     logger.info(f"Checking cache for {fileref.file_path}")
@@ -133,3 +161,5 @@ def stage_fileref_and_get_fpath(fileref) -> Path:
         logger.info(f"File exists at {dst_fpath}")
 
     return dst_fpath
+
+ # type: ignore
