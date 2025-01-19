@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional, Annotated
 from pathlib import Path
 
 import zarr
@@ -67,27 +67,53 @@ class ZarrConversionConfig(BaseModel):
         description="Sharding size to use for Zarr v3"
     )
 
+def coordinate_scales_from_ome_zarr_uri(ome_zarr_uri: str):
+    im = ome_zarr_image_from_ome_zarr_uri(ome_zarr_uri)
+    from .proxyimage import calculate_voxel_to_physical_factors
+    sf = calculate_voxel_to_physical_factors(im.ngff_metadata)
+    coordinate_scales = [
+        1.0,
+        1.0,
+        sf['PhysicalSizeZ'],
+        sf['PhysicalSizeY'],
+        sf['PhysicalSizeX']
+    ]
+
+    return coordinate_scales
+
+
+def n_pyramid_levels_from_ome_zarr_uri(ome_zarr_uri: str):
+    im = ome_zarr_image_from_ome_zarr_uri(ome_zarr_uri)
+
+    return im.n_scales
+
 
 @app.command()
-def zarr2zarr(ome_zarr_uri: str, output_base_dirpath: Path):
+def zarr2zarr(
+    ome_zarr_uri: str, 
+    output_base_dirpath: Path,
+    conversion_config: Annotated[Optional[str], typer.Argument()] = "{}"
+):
 
-    # TODO - manage options properly
-    target_chunks = [1, 1, 64, 64, 64]
-    downsample_factors = [1, 1, 2, 2, 2]
-    coordinate_scales = [1, 1, 2167e-6, 2167e-6, 2167e-6]
-    n_pyramid_levels = 4
+    config = ZarrConversionConfig.model_validate_json(conversion_config)
+    if not config.coordinate_scales:
+        config.coordinate_scales = coordinate_scales_from_ome_zarr_uri(ome_zarr_uri)
+    if not config.n_pyramid_levels:
+        config.n_pyramid_levels = n_pyramid_levels_from_ome_zarr_uri(ome_zarr_uri)
 
-    output_array_keys = [str(i) for i in range(n_pyramid_levels)]
+    rich.print(config)
+
+    output_array_keys = [str(i) for i in range(config.n_pyramid_levels)]
 
     # Rechunk the base of the pyramid
     # FIXME - path key for base of incoming pyramid is not always '0', just usually
     input_array_uri = ome_zarr_uri + '/0'
     output_dirpath = output_base_dirpath / '0'
     if not output_dirpath.exists():
-        rechunk_and_save_array(input_array_uri, output_dirpath, target_chunks)
+        rechunk_and_save_array(input_array_uri, output_dirpath, config.target_chunks, config.transpose_axes)
 
     # Regenerate the rest of the period by downsampling
-    for level in range(n_pyramid_levels - 1):
+    for level in range(config.n_pyramid_levels - 1):
         input_array_dirpath = output_base_dirpath / output_array_keys[level] 
         output_array_dirpath = output_base_dirpath / output_array_keys[level+1]
         if not output_array_dirpath.exists():
@@ -95,12 +121,12 @@ def zarr2zarr(ome_zarr_uri: str, output_base_dirpath: Path):
             downsample_array_and_write_to_dirpath(
                 str(input_array_dirpath),
                 output_array_dirpath,
-                downsample_factors,
-                target_chunks
+                config.downsample_factors,
+                config.target_chunks
             )
 
     # Create and write the OME-Zarr metadata    
-    ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", coordinate_scales)
+    ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales)
     group = zarr.open_group(output_base_dirpath)
     group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
 

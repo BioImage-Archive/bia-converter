@@ -139,7 +139,12 @@ def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
     
 
 
-def rechunk_and_save_array(input_array_uri: str, output_dirpath: Path, target_chunks: List[int]):
+def rechunk_and_save_array(
+        input_array_uri: str,
+        output_dirpath: Path,
+        target_chunks: List[int],
+        transpose_axes: List[int]
+):
 
     input_array_uri = ensure_uri(input_array_uri)
 
@@ -148,9 +153,7 @@ def rechunk_and_save_array(input_array_uri: str, output_dirpath: Path, target_ch
         'kvstore': input_array_uri,
     }).result()
 
-    # transposed = source.transpose([2, 1, 0, 3, 4])
-    transposed = source.transpose([0, 1, 2, 3, 4])
-
+    transposed = source.transpose(transpose_axes)
     write_array_to_disk_chunked(transposed, output_dirpath, target_chunks)
     
 
@@ -229,9 +232,8 @@ def downsample_array_and_write_to_dirpath(
     }
 
     output_array = ts.open(output_spec, create=True, delete_existing=True).result()
-    # store.write(source).result()
 
-    processing_chunk_size = [512, 1, 512, 512, 512]
+    processing_chunk_size = [512, 512, 512, 512, 512]
     
     # Calculate number of chunks needed in each dimension
     num_chunks = tuple(
