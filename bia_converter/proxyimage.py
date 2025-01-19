@@ -28,36 +28,6 @@ class OMEZarrImage(BaseModel):
 
     ngff_metadata: ZMeta | None = None
 
-
-class BIARasterImage(BaseModel):
-
-    sizeX: int
-    sizeY: int
-    sizeZ: int = 1
-    sizeC: int = 1
-    sizeT: int = 1
-        
-    PhysicalSizeX: Optional[float] = None
-    PhysicalSizeY: Optional[float] = None
-    PhysicalSizeZ: Optional[float] = None
-
-    licence: Optional[str] = None
-        
-    imaging_type: Optional[str] = None
-    organism: Optional[str] = None
-    biological_entity: Optional[str] = None
-    specimen_prep: Optional[str] = None
-        
-    study_title: Optional[str] = None
-    study_description: Optional[str] = None
-    study_accession_id: Optional[str] = None
-
-    image_landing_uri: Optional[str] = None
-
-    original_relpath: Optional[str] = None
-
-    image_id: Optional[str] = None
-    thumbnail_uri: Optional[str] = None
         
 # FIXME? - should we allow no unit? Propagate unknowns?
 UNIT_LOOKUP = {
@@ -116,11 +86,11 @@ def ome_zarr_image_from_ome_zarr_uri(uri, ignore_unit_errors=False):
     tdim, cdim, zdim, ydim, xdim = zarray.shape
 
     ome_zarr_image = OMEZarrImage(
-        sizeX=xdim,
-        sizeY=ydim,
-        sizeZ=zdim,
-        sizeC=cdim,
-        sizeT=tdim,
+        sizeX=xdim, # type: ignore
+        sizeY=ydim, # type: ignore
+        sizeZ=zdim, # type: ignore
+        sizeC=cdim, # type: ignore
+        sizeT=tdim, # type: ignore
         path_keys = [ds.path for ds in ngff_metadata.multiscales[0].datasets]
     )
     
@@ -157,32 +127,6 @@ def scales_from_ngff_metadata(ngff_metadata):
     return scale_factors
 
 
-def bia_raster_image_from_ome_zarr_uri(uri):
-    """Generate a BIA raster image object by reading an OME Zarr and
-    parsing the NGFF metadata for properties. Makes many assumptions
-    about ordering of multiscales data."""
-    
-    zgroup = zarr.open(uri)
-    ngff_metadata = ZMeta.parse_obj(zgroup.attrs.asdict())
-
-    path_key = ngff_metadata.multiscales[0].datasets[0].path
-    zarray = zgroup[path_key]
-    tdim, cdim, zdim, ydim, xdim = zarray.shape
-
-    bia_raster_image = BIARasterImage(
-        sizeX=xdim,
-        sizeY=ydim,
-        sizeZ=zdim,
-        sizeC=cdim,
-        sizeT=tdim
-    )
-    
-    factors = calculate_voxel_to_physical_factors(ngff_metadata)
-    bia_raster_image.__dict__.update(factors)
-    
-    return bia_raster_image
-
-
 def generate_datasets(ome_zarr_image: OMEZarrImage):
 
     start_z = ome_zarr_image.PhysicalSizeZ
@@ -198,7 +142,7 @@ def generate_datasets(ome_zarr_image: OMEZarrImage):
             path=path_label,
             coordinateTransformations=[
                 CoordinateTransformation(
-                    scale=[1., 1., start_z * factor_z ** n, start_y * factor_y ** n, start_x * factor_x ** n],
+                    scale=[1., 1., start_z * factor_z ** n, start_y * factor_y ** n, start_x * factor_x ** n], # type: ignore
                     type="scale"
                 )
             ]
