@@ -24,3 +24,9 @@ TODO:
 * More broadly, support passing in conversion options
 * Support routes where we can convert *some* subtypes of a representation, e.g. we can convert UPLOADED_BY_SUBMITTOR MRC files to PNG
 * Modernise / share the OME-Zarr reading code
+
+
+zarr2zarr
+---------
+
+https://uk1s3.embassy.ebi.ac.uk/bia-integrator-data/EMPIAR-10392/IM1/IM1.zarr/0
