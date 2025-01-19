@@ -1,8 +1,10 @@
 import sys
 import logging
+from typing import Optional
 
 import rich
 import typer
+from typing_extensions import Annotated
 
 from bia_integrator_api.models import ImageRepresentationUseType # type: ignore
 
@@ -37,7 +39,11 @@ def info():
 
 
 @app.command()
-def convert(image_rep_uuid: str, target_type: ImageRepresentationUseType):
+def convert(
+    image_rep_uuid: str,
+    target_type: ImageRepresentationUseType,
+    conversion_config: Annotated[Optional[str], typer.Argument()] = "{}"
+    ):
     logging.basicConfig(level=logging.INFO)
 
     image_rep = api_client.get_image_representation(image_rep_uuid)

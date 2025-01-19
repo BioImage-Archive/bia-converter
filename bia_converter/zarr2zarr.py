@@ -1,14 +1,15 @@
+from typing import List
 from pathlib import Path
 
 import zarr
 import rich
 import typer
+from pydantic import BaseModel, Field
 
 from .proxyimage import ome_zarr_image_from_ome_zarr_uri
 from .omezarrgen import (
     rechunk_and_save_array,
     create_ome_zarr_metadata,
-    create_omero_metadata_object,
     downsample_array_and_write_to_dirpath
 )
 
@@ -32,13 +33,49 @@ def ome_zarr_info(ome_zarr_uri):
     rich.print(im)
 
 
+class ZarrConversionConfig(BaseModel):
+    target_chunks: List[int] = Field(
+        default=[1, 1, 64, 64, 64],
+        description="Array chunk layout for output zarr"
+    )
+    downsample_factors: List[int] = Field(
+        default=[1, 1, 2, 2, 2],
+        description="Factor by which each successive pyramid layer will be downsampled"
+    )
+    transpose_axes: List[int] = Field(
+        default=[0, 1, 2, 3, 4],
+        description="Order of axis transpositions to be applied during transformation."
+    )
+    coordinate_scales: List[float] = Field(
+        default=None,
+        description="Voxel to physical space coordinate scales for pyramid base level. If unset, will be copied from input OME-Zarr"
+    )
+    n_pyramid_levels: int = Field(
+        default=None,
+        description="Number of downsampled "
+    )
+    rewrite_omero_block: bool = Field(
+        default=False,
+        description="Rewrite the OMERO rendering block, guessing parameters. Otherwise will copy from input OME-Zarr."
+    )
+    zarr_version: int = Field(
+        default=2,
+        description="Version of Zarr to use for output (2 or 3)"
+    )
+    shard_Size: List[int] = Field(
+        default=[1, 1, 128, 128, 128],
+        description="Sharding size to use for Zarr v3"
+    )
+
+
 @app.command()
 def zarr2zarr(ome_zarr_uri: str, output_base_dirpath: Path):
 
+    # TODO - manage options properly
     target_chunks = [1, 1, 64, 64, 64]
     downsample_factors = [1, 1, 2, 2, 2]
-    coordinate_scales = [1, 1, 2e-8, 1e-8, 1e-8]
-    n_pyramid_levels = 3
+    coordinate_scales = [1, 1, 2167e-6, 2167e-6, 2167e-6]
+    n_pyramid_levels = 4
 
     output_array_keys = [str(i) for i in range(n_pyramid_levels)]
 

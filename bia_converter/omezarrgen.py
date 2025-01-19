@@ -91,6 +91,54 @@ def create_ome_zarr_metadata(zarr_group_uri: str, name: str, coordinate_scales: 
     return ome_zarr_metadata
 
 
+def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
+    """Write the input array to the output path with the target array chunk size.
+    The actual read/write from source to output is also chunked, so should handle
+    large arrays without memory issues."""
+
+    output_spec = {
+        'driver': 'zarr',
+        'kvstore': {
+            'driver': 'file',
+            'path': str(output_dirpath)
+        },
+        'dtype': source_array.dtype.name,
+        'metadata': {
+            'shape': source_array.shape,
+            'chunks': target_chunks,
+            'dimension_separator': '/',
+        },
+    }
+
+
+    output_array = ts.open(output_spec, create=True, delete_existing=True).result()
+
+    # TODO - should probably make this configurable
+    processing_chunk_size = [512, 512, 512, 512, 512]
+    
+    # Calculate number of chunks needed in each dimension
+    num_chunks = tuple(
+        (shape + chunk - 1) // chunk 
+        for shape, chunk in zip(source_array.shape, processing_chunk_size)
+    )
+    
+    # Process array in chunks
+    for idx in itertools.product(*[range(n) for n in num_chunks]):
+        # Calculate slice for this chunk
+        slices = tuple(
+            slice(i * c, min((i + 1) * c, s))
+            for i, c, s in zip(idx, processing_chunk_size, source_array.shape)
+        )
+        
+        # Read and write this chunk
+        chunk_data = source_array[slices].read().result()
+        output_array[slices].write(chunk_data).result()
+        
+        # Optional progress indication
+        rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
+    
+
+
 def rechunk_and_save_array(input_array_uri: str, output_dirpath: Path, target_chunks: List[int]):
 
     input_array_uri = ensure_uri(input_array_uri)
@@ -100,45 +148,10 @@ def rechunk_and_save_array(input_array_uri: str, output_dirpath: Path, target_ch
         'kvstore': input_array_uri,
     }).result()
 
-    output_spec = {
-        'driver': 'zarr',
-        'kvstore': {
-            'driver': 'file',
-            'path': str(output_dirpath)
-        },
-        'dtype': source.dtype.name,
-        'metadata': {
-            'shape': source.shape,
-            'chunks': target_chunks,
-            'dimension_separator': '/',
-        },
-    }
+    # transposed = source.transpose([2, 1, 0, 3, 4])
+    transposed = source.transpose([0, 1, 2, 3, 4])
 
-    output_array = ts.open(output_spec, create=True, open=True).result()
-    # output_array.write(source).result()
-
-    processing_chunk_size = [1, 1, 128, 128, 128]
-    
-    # Calculate number of chunks needed in each dimension
-    num_chunks = tuple(
-        (shape + chunk - 1) // chunk 
-        for shape, chunk in zip(source.shape, processing_chunk_size)
-    )
-    
-    # Process array in chunks
-    for idx in itertools.product(*[range(n) for n in num_chunks]):
-        # Calculate slice for this chunk
-        slices = tuple(
-            slice(i * c, min((i + 1) * c, s))
-            for i, c, s in zip(idx, processing_chunk_size, source.shape)
-        )
-        
-        # Read and write this chunk
-        chunk_data = source[slices].read().result()
-        output_array[slices].write(chunk_data).result()
-        
-        # Optional progress indication
-        rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
+    write_array_to_disk_chunked(transposed, output_dirpath, target_chunks)
     
 
 def ensure_uri(path_or_uri):
@@ -215,8 +228,32 @@ def downsample_array_and_write_to_dirpath(
         }
     }
 
-    store = ts.open(output_spec, create=True, delete_existing=True).result()
-    store.write(source).result()
+    output_array = ts.open(output_spec, create=True, delete_existing=True).result()
+    # store.write(source).result()
+
+    processing_chunk_size = [512, 1, 512, 512, 512]
+    
+    # Calculate number of chunks needed in each dimension
+    num_chunks = tuple(
+        (shape + chunk - 1) // chunk 
+        for shape, chunk in zip(source.shape, processing_chunk_size)
+    )
+    
+    # Process array in chunks
+    for idx in itertools.product(*[range(n) for n in num_chunks]):
+        # Calculate slice for this chunk
+        slices = tuple(
+            slice(i * c, min((i + 1) * c, s))
+            for i, c, s in zip(idx, processing_chunk_size, source.shape)
+        )
+        
+        # Read and write this chunk
+        chunk_data = source[slices].read().result()
+        output_array[slices].write(chunk_data).result()
+        
+        # Optional progress indication
+        rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
+    
 
 
 def get_array_dims(group):
