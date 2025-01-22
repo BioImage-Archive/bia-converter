@@ -62,7 +62,7 @@ class ZarrConversionConfig(BaseModel):
         default=2,
         description="Version of Zarr to use for output (2 or 3)"
     )
-    shard_Size: List[int] = Field(
+    shard_size: List[int] = Field(
         default=[1, 1, 128, 128, 128],
         description="Sharding size to use for Zarr v3"
     )
@@ -126,7 +126,7 @@ def zarr2zarr(
             )
 
     # Create and write the OME-Zarr metadata    
-    ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales)
+    ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales, config.downsample_factors)
     group = zarr.open_group(output_base_dirpath)
     group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
 

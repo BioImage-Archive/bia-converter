@@ -63,18 +63,34 @@ def create_omero_metadata_object(zarr_group_uri: str):
 
     return omero
 
-def create_ome_zarr_metadata(zarr_group_uri: str, name: str, coordinate_scales: List[float]) -> ZMeta:
+def create_ome_zarr_metadata(
+        zarr_group_uri: str,
+        name: str,
+        coordinate_scales: List[float],
+        downsample_factors: List[int] = None
+    ) -> ZMeta:
     """Read a Zarr group and generate the OME-Zarr metadata for that group,
-    effectively turning a group of Zarr arrays into an OME-Zarr."""
+    effectively turning a group of Zarr arrays into an OME-Zarr.
+    
+    If downsample factors are provided, use those to calculate scale transforms,
+    otherwise calculate them from the sizes of the arrays."""
 
     # Open the group and find the arrays in it
     group = zarr.open_group(zarr_group_uri)
     array_keys = list(group.array_keys())
+    n_pyramid_levels = len(array_keys)
 
-    # From these arrays, get their dimensions and use these to calculate the scaling factors
-    # between them
-    array_dims = get_array_dims(group)
-    dim_ratios = get_dimension_ratios(array_dims)
+    if downsample_factors == None:
+        # From arrays, get their dimensions and use these to calculate the scaling factors
+        # between them
+        array_dims = get_array_dims(group)
+        dim_ratios = get_dimension_ratios(array_dims)
+    else:
+        # Use the given downsample factors to calculate dimension ratios
+        dim_ratios = [
+            [(1.0 / f) ** n for f in downsample_factors]
+            for n in range(n_pyramid_levels)
+        ]
 
     # Use these scaling factors together with base coordinate scales to generate DataSet objects
     datasets = generate_dataset_objects(coordinate_scales, dim_ratios, array_keys)
