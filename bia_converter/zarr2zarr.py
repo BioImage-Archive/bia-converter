@@ -1,3 +1,4 @@
+import math
 from typing import List, Optional, Annotated
 from pathlib import Path
 
@@ -15,6 +16,12 @@ from .omezarrgen import (
 
 
 app = typer.Typer()
+
+
+def calculate_downsampling_steps(shape):
+    max_dim = max(shape)
+    steps = math.ceil(math.log2(max_dim / 256))
+    return max(0, steps)
 
 
 @app.command()
@@ -135,6 +142,7 @@ def zarr2zarr(
 def n52zarr(
     n5_uri: str, 
     output_base_dirpath: Path,
+    conversion_config: Annotated[Optional[str], typer.Argument()] = "{}"
 ):
     # n5_uri = "https://s3.embl.de/platybrowser/rawdata/sbem-6dpf-1-whole-raw.n5/setup0/timepoint0/s0"
 
@@ -145,13 +153,46 @@ def n52zarr(
         'kvstore': n5_uri
     }).result()
 
+    # TODO - this is hacky, assumes 3 dimensions always z, y, x
+    if len(dataset.shape) == 3:
+        output_array = dataset[None,None,:,:,:]
+    else:
+        output_array = dataset
 
     from .omezarrgen import write_array_to_disk_chunked
 
-    target_chunks = [64, 64, 64]
+    config = ZarrConversionConfig.model_validate_json(conversion_config)
+    if not config.coordinate_scales:
+        config.coordinate_scales = [1.0, 1.0, 1.0, 1.0, 1.0]
+    if not config.n_pyramid_levels:
+        config.n_pyramid_levels = 1 + calculate_downsampling_steps(dataset.shape)
+
+    rich.print(config)
 
     output_dirpath = output_base_dirpath / '0'
-    write_array_to_disk_chunked(dataset, output_dirpath, target_chunks)
+    if not output_dirpath.exists():
+        write_array_to_disk_chunked(output_array, output_dirpath, config.target_chunks)
+    else:
+        rich.print(f"{output_dirpath} exists, will not overwrite")
+
+    # Regenerate the rest of the period by downsampling
+    output_array_keys = [str(i) for i in range(config.n_pyramid_levels)]
+    for level in range(config.n_pyramid_levels - 1):
+        input_array_dirpath = output_base_dirpath / output_array_keys[level] 
+        output_array_dirpath = output_base_dirpath / output_array_keys[level+1]
+        if not output_array_dirpath.exists():
+            rich.print(f"Downsampling from {input_array_dirpath} to {output_array_dirpath}")
+            downsample_array_and_write_to_dirpath(
+                str(input_array_dirpath),
+                output_array_dirpath,
+                config.downsample_factors,
+                config.target_chunks
+            )
+
+    # Create and write the OME-Zarr metadata    
+    ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales, config.downsample_factors)
+    group = zarr.open_group(output_base_dirpath)
+    group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
 
 
 if __name__ == "__main__":
