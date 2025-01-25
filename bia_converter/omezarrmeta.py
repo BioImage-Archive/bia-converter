@@ -46,7 +46,7 @@ class Axis(BaseModel):
 
 class MultiScaleImage(BaseModel):
     datasets: List[DataSet]
-    metadata: MSMetadata
+    metadata: Optional[MSMetadata] = None
     name: Optional[str] = None
     axes: Optional[List[Axis]]
     version: str

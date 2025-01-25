@@ -23,6 +23,7 @@ def sync_dirpath_to_s3(src_dirpath, dst_suffix):
 
     cmd = f'aws --region us-east-1 --endpoint-url {settings.endpoint_url} s3 sync "{src_dirpath}/" s3://{dst_key} --acl public-read'
     logger.info(f"Uploading using command {cmd}")
+
     subprocess.run(cmd, shell=True)
 
     uri = f"{settings.endpoint_url}/{dst_key}"

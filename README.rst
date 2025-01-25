@@ -18,6 +18,8 @@ of TIFF files to a single OME-Zarr).
 Setup
 -----
 
+TBC
+
 TODO:
 
 * Allow overrides when units are not set correctly
@@ -29,4 +31,13 @@ TODO:
 zarr2zarr
 ---------
 
-https://uk1s3.embassy.ebi.ac.uk/bia-integrator-data/EMPIAR-10392/IM1/IM1.zarr/0
+Examples:
+
+Convert remote Zarr, setting coordinate scales:
+
+    poetry run zarr2zarr zarr2zarr https://uk1s3.embassy.ebi.ac.uk/bia-integrator-data/S-BIAD1021/06bc50fb-03ae-4dc5-8a12-89d4f2fcbade/91e29e80-0467-428f-8d96-16cbee80b2fe.ome.zarr/0 local-cache/flower-head1.zarr '{"coordinate_scales": [1.0, 1.0, 13e-6, 13e-6,
+ 13e-6]}'
+
+Convert remote Zarr, transposing T and Z axes, and setting isotropic 2.54 micron voxel size:
+
+    poetry run zarr2zarr zarr2zarr https://uk1s3.embassy.ebi.ac.uk/bia-integrator-data/S-BIAD606/73d7bf65-460b-44d7-9b38-d5803c440a28/32f17491-419d-422b-80eb-538567db06e5.ome.zarr/0 local-data/sea-spider2.zarr '{"transpose_axes": [2, 1, 0, 3, 4], "coordinate_scales": [1.0, 1.0, 2.554e-6, 2.554e-6, 2.554e-6]}'

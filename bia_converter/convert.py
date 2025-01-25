@@ -1,16 +1,19 @@
+import shutil
 import logging
+import zipfile
 import tempfile
 from pathlib import Path
 
 import rich
 import parse # type: ignore
 from bia_integrator_api.models import ( # type: ignore
-    ImageRepresentation, ImageRepresentationUseType
+    ImageRepresentation, ImageRepresentationUseType, FileReference
 )
 from bia_shared_datamodels.uuid_creation import ( # type: ignore
     create_image_representation_uuid
 )
 
+from .config import settings
 from .io import copy_local_to_s3, stage_fileref_and_get_fpath, sync_dirpath_to_s3
 from .conversion import run_zarr_conversion
 from .bia_api_client import api_client, store_object_in_api_idempotent
@@ -214,7 +217,6 @@ def stage_and_link_filerefs(tmpdirname, file_references, fileref_coords_map, bfc
 
 def get_conversion_output_path(output_rep_uuid):
    
-    from .config import settings
     dst_dir_basepath = settings.cache_root_dirpath/"zarr"
     dst_dir_basepath.mkdir(exist_ok=True, parents=True)
     zarr_fpath = dst_dir_basepath/f"{output_rep_uuid}.zarr"
@@ -222,10 +224,10 @@ def get_conversion_output_path(output_rep_uuid):
     return zarr_fpath
 
 
-def get_dimensions_dict_from_zarr(ome_zarr_fpath: Path):
+def get_dimensions_dict_from_zarr(ome_zarr_image_uri):
 
     from .proxyimage import ome_zarr_image_from_ome_zarr_uri
-    im = ome_zarr_image_from_ome_zarr_uri(ome_zarr_fpath / '0')
+    im = ome_zarr_image_from_ome_zarr_uri(ome_zarr_image_uri)
     attr_map = {
         'sizeX': 'size_x',
         'sizeY': 'size_y',
@@ -242,19 +244,70 @@ def get_dimensions_dict_from_zarr(ome_zarr_fpath: Path):
     return update_dict
 
 
-def convert_uploaded_by_submitter_to_interactive_display(input_image_rep: ImageRepresentation) -> ImageRepresentation:
-    # Should convert an UPLOADED_BY_SUBMITTER rep, to an INTERACTIVE_DISPLAY rep
+def check_if_path_contains_zarr_group(dirpath: Path) -> bool:
+    import zarr
 
-    assert input_image_rep.use_type == ImageRepresentationUseType.UPLOADED_BY_SUBMITTER
+    try:
+        zarr.open_group(dirpath, mode='r')
+        return True
+    except zarr.hierarchy.GroupNotFoundError:
+        return False
+    
 
-    image = api_client.get_image(input_image_rep.representation_of_uuid)
-    base_image_rep = create_image_representation_object(image, ".ome.zarr", "INTERACTIVE_DISPLAY")
+def fetch_ome_zarr_zip_fileref_and_unzip(
+        file_reference: FileReference,
+        output_image_rep: ImageRepresentation
+    ) -> Path:
+    """Fetch the given file reference, unzip to a temporary location, copy to
+    cache and return the path.
 
-    # Get the file references we'll need
-    file_references = get_all_file_references_for_image(image)
+        Args:
+        file_reference (FileReference): Reference to the OME-ZARR zip file
+        
+    Returns:
+        Path: Path to the unzipped directory containing the OME-ZARR data
+        
+    Raises:
+        zipfile.BadZipFile: If the file is not a valid zip file
+    """
 
-    # Extract the pattern used to match which files to convert, and construct a map that related
-    # file references to image coordinates
+    unpacked_zarr_dirpath = get_conversion_output_path(output_image_rep.uuid)
+
+    # If the target directory exists, don't try to overwrite.
+    # TODO - some validation that the target directory correctly corresponds to the zip file
+    # contents, this is not trivial
+    if unpacked_zarr_dirpath.exists():
+        logging.info(f"Target zarr directory {unpacked_zarr_dirpath} exists, will not overwrite")
+        return unpacked_zarr_dirpath
+
+    # Get the file path from the file reference
+    zip_path = stage_fileref_and_get_fpath(file_reference)
+    
+    # Create a temporary directory to extract to
+    temp_dir = Path(tempfile.mkdtemp())
+    
+    # Extract the zip file
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(temp_dir)
+
+    # Zarr group root might be same as zip root
+    if check_if_path_contains_zarr_group(temp_dir):
+        zarr_root = temp_dir
+    
+    # Zarr group might be inside a directory
+    zip_contents = list(temp_dir.iterdir())
+    if len(zip_contents) == 1:
+        if check_if_path_contains_zarr_group(zip_contents[0]):
+            zarr_root = zip_contents[0]
+
+    logging.info(f"Move {zarr_root} to {unpacked_zarr_dirpath}")
+
+    shutil.move(zarr_root, unpacked_zarr_dirpath)
+
+    return unpacked_zarr_dirpath
+
+
+def convert_with_bioformats2raw_pattern(input_image_rep, file_references, base_image_rep):
     attrs = attributes_by_name(input_image_rep)
     parse_template = attrs['file_pattern']['file_pattern']
     selected_filerefs, fileref_coords_map = find_file_references_matching_template(file_references, parse_template)
@@ -272,16 +325,42 @@ def convert_uploaded_by_submitter_to_interactive_display(input_image_rep: ImageR
         if not output_zarr_fpath.exists():
             run_zarr_conversion(conversion_input_fpath, output_zarr_fpath)
 
+    return output_zarr_fpath
+
+
+def convert_uploaded_by_submitter_to_interactive_display(
+        input_image_rep: ImageRepresentation,
+        conversion_parameters: dict = {}
+    ) -> ImageRepresentation:
+    # Should convert an UPLOADED_BY_SUBMITTER rep, to an INTERACTIVE_DISPLAY rep
+
+    assert input_image_rep.use_type == ImageRepresentationUseType.UPLOADED_BY_SUBMITTER
+
+    image = api_client.get_image(input_image_rep.representation_of_uuid)
+    base_image_rep = create_image_representation_object(image, ".ome.zarr", "INTERACTIVE_DISPLAY")
+
+    # Get the file references we'll need
+    file_references = get_all_file_references_for_image(image)
+
+    if input_image_rep.image_format == ".ome.zarr.zip":
+        assert len(file_references) == 1
+        output_zarr_fpath = fetch_ome_zarr_zip_fileref_and_unzip(file_references[0], base_image_rep)
+    else:
+        output_zarr_fpath = convert_with_bioformats2raw_pattern(input_image_rep, file_references, base_image_rep)
+
     # Upload to S3
     dst_suffix = create_s3_uri_suffix_for_image_representation(base_image_rep)
     zarr_group_uri = sync_dirpath_to_s3(output_zarr_fpath, dst_suffix)
-    ome_zarr_uri = zarr_group_uri + '/0'
+    # ome_zarr_uri = zarr_group_uri + '/0'
+    ome_zarr_uri = zarr_group_uri
+    # rich.print(zarr_group_uri)
+    # import sys; sys.exit(0)
 
     # Set image_rep properties that we now know
     # base_image_rep.file_uri = 
     base_image_rep.total_size_in_bytes = get_dir_size(output_zarr_fpath)
     base_image_rep.file_uri = [ome_zarr_uri]
-    update_dict = get_dimensions_dict_from_zarr(output_zarr_fpath)
+    update_dict = get_dimensions_dict_from_zarr(ome_zarr_uri)
     base_image_rep.__dict__.update(update_dict)
 
     # Write back to API

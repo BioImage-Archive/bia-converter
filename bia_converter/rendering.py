@@ -9,6 +9,11 @@ from microfilm.colorify import multichannel_to_rgb
 from matplotlib.colors import LinearSegmentedColormap
 
 from .omezarrmeta import ZMeta
+from .proxyimage import (
+    ome_zarr_image_from_ome_zarr_uri,
+    get_array_with_min_dimensions,
+    reshape_to_5D
+)
 
 
 DEFAULT_COLORS = [
@@ -273,14 +278,20 @@ def render_proxy_image(proxy_im, bbrel=DEFAULT_BB, dims=(512, 512), t=None, z=No
     min_ydim_needed = ydim / bbrel.ysize
     min_xdim_needed = xdim / bbrel.xsize
     
-    darray = proxy_im.get_dask_array_with_min_dimensions((min_xdim_needed, min_ydim_needed))
+    # darray = proxy_im.get_dask_array_with_min_dimensions((min_xdim_needed, min_ydim_needed))
+    array = get_array_with_min_dimensions(proxy_im, (min_xdim_needed, min_ydim_needed))
+
+    # import rich
+    darray = reshape_to_5D(array, proxy_im.dimensions)
+    # rich.print(darray, proxy_im.dimensions)
+    # import sys; sys.exit(0)
 
     if not t:
-        t = proxy_im.size_t // 2
+        t = proxy_im.sizeT // 2
     if not z:
-        z = proxy_im.size_z // 2
+        z = proxy_im.sizeZ // 2
 
-    channels_to_render = min(proxy_im.size_c, len(DEFAULT_COLORS))
+    channels_to_render = min(proxy_im.sizeC, len(DEFAULT_COLORS))
     if not mode:
         if channels_to_render == 1:
             mode = "grayscale"
@@ -334,7 +345,8 @@ def render_proxy_image(proxy_im, bbrel=DEFAULT_BB, dims=(512, 512), t=None, z=No
 def generate_padded_thumbnail_from_ngff_uri(ngff_uri, dims=(256, 256), autocontrast=True):
     """Given a NGFF URI, generate a 2D thumbnail of the given dimensions."""
 
-    proxy_im = NGFFProxyImage(ngff_uri)
+    # proxy_im = NGFFProxyImage(ngff_uri)
+    proxy_im = ome_zarr_image_from_ome_zarr_uri(ngff_uri)
 
     im = render_proxy_image(proxy_im)
     im.thumbnail(dims)
