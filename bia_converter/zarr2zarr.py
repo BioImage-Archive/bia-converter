@@ -131,6 +131,27 @@ def zarr2zarr(
     group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
 
 
+@app.command()
+def n52zarr(
+    n5_uri: str, 
+    output_base_dirpath: Path,
+):
+    # n5_uri = "https://s3.embl.de/platybrowser/rawdata/sbem-6dpf-1-whole-raw.n5/setup0/timepoint0/s0"
+
+    import tensorstore as ts
+
+    dataset = ts.open({
+        'driver': 'n5',
+        'kvstore': n5_uri
+    }).result()
+
+
+    from .omezarrgen import write_array_to_disk_chunked
+
+    target_chunks = [64, 64, 64]
+
+    output_dirpath = output_base_dirpath / '0'
+    write_array_to_disk_chunked(dataset, output_dirpath, target_chunks)
 
 
 if __name__ == "__main__":

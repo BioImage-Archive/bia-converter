@@ -6,7 +6,8 @@ This includes:
 * Generating downsampled representations (creating the resolution pyramid)
 * Creating the OME-Zarr metadata
 """
-
+import time
+from datetime import timedelta
 import itertools
 from pathlib import Path
 from typing import List
@@ -73,7 +74,7 @@ def create_ome_zarr_metadata(
     effectively turning a group of Zarr arrays into an OME-Zarr.
     
     If downsample factors are provided, use those to calculate scale transforms,
-    otherwise calculate them from the sizes of the arrays."""
+    otherwise calculate them from the sizes of the"""
 
     # Open the group and find the arrays in it
     group = zarr.open_group(zarr_group_uri)
@@ -137,9 +138,13 @@ def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
         (shape + chunk - 1) // chunk 
         for shape, chunk in zip(source_array.shape, processing_chunk_size)
     )
-    
+
     # Process array in chunks
-    for idx in itertools.product(*[range(n) for n in num_chunks]):
+    idx_list = list(itertools.product(*[range(n) for n in num_chunks]))
+    start_time = time.time()
+    
+    for n, idx in enumerate(idx_list):
+        
         # Calculate slice for this chunk
         slices = tuple(
             slice(i * c, min((i + 1) * c, s))
@@ -150,8 +155,23 @@ def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
         chunk_data = source_array[slices].read().result()
         output_array[slices].write(chunk_data).result()
         
-        # Optional progress indication
-        rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
+        # Calculate progress and timing
+        elapsed_time = time.time() - start_time
+        chunks_remaining = len(idx_list) - (n + 1)
+        
+        if n > 0:  # Only calculate average after first chunk
+            avg_chunk_time = elapsed_time / (n + 1)
+            eta_seconds = avg_chunk_time * chunks_remaining
+            eta = str(timedelta(seconds=int(eta_seconds)))
+        else:
+            eta = "calculating..."
+            
+        # Progress indication with timing
+        rich.print(
+            f"Processed chunk [{n + 1}/{len(idx_list)}]{idx} of {tuple(n-1 for n in num_chunks)} | "
+            f"Elapsed: {str(timedelta(seconds=int(elapsed_time)))} | "
+            f"ETA: {eta}"
+        )
     
 
 
