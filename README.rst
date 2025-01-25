@@ -15,6 +15,13 @@ upload the result to an S3 location configured by environmental variables.
 The code supports conversion of multiple input files to a single output image (e.g. a stack
 of TIFF files to a single OME-Zarr).
 
+Supported conversions
+---------------------
+
+UPLOADED_BY_SUBMITTER -> INTERACTIVE_DISPLAY (including .ome.zarr.zip)
+INTERACTIVE_DISPLAY -> STATIC_DISPLAY
+INTERACTIVE_DISPLAY -> THUMBNAIL
+
 Setup
 -----
 
