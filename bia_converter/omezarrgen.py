@@ -79,6 +79,9 @@ def create_ome_zarr_metadata(
     # Open the group and find the arrays in it
     group = zarr.open_group(zarr_group_uri)
     array_keys = list(group.array_keys())
+
+    # Make sure we sort in increasing numerical order - this assumes arrays are "0", "1", etc
+    array_keys.sort(key=lambda x: int(x))
     n_pyramid_levels = len(array_keys)
 
     if downsample_factors == None:
@@ -114,7 +117,7 @@ def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
     large arrays without memory issues."""
 
     output_spec = {
-        'driver': 'zarr',
+        'driver': 'zarr3',
         'kvstore': {
             'driver': 'file',
             'path': str(output_dirpath)
@@ -122,9 +125,32 @@ def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
         'dtype': source_array.dtype.name,
         'metadata': {
             'shape': source_array.shape,
-            'chunks': target_chunks,
-            'dimension_separator': '/',
+            'chunk_grid': {
+                'name': 'regular',
+                'configuration': {
+                    'chunk_shape': [1, 1, 256, 256, 256]
+                }
+            },
+            'codecs': [
+                {
+                    'name': 'sharding_indexed',
+                    'configuration': {
+                        "chunk_shape": target_chunks,  # read size
+                        "index_codecs": [
+                            {"name": "bytes", "configuration": {"endian": "little"}},
+                            {"name": "crc32c"},
+                        ],
+                    }
+                }
+            ],
         },
+            
+            # 'dimension_separator': '/',
+        # 'metadata': {
+        #     'shape': source_array.shape,
+        #     'chunks': target_chunks,
+        #     'dimension_separator': '/',
+        # },
     }
 
 
@@ -245,7 +271,7 @@ def downsample_array_and_write_to_dirpath(
         'downsample_factors': downsample_factors,
         "downsample_method": downsample_method,
         'base': {
-            'driver': 'zarr',
+            'driver': 'zarr3',
             'kvstore': {
                 'driver': 'file',
                 'path': array_uri
@@ -253,44 +279,46 @@ def downsample_array_and_write_to_dirpath(
         }
     }).result()
 
-    output_spec = {
-        'driver': 'zarr',
-        'kvstore': {
-            'driver': 'file',
-            'path': str(output_dirpath) 
-        },
-        'dtype': source.dtype.name,
-        'metadata': {
-            'shape': source.shape,
-            'chunks': output_chunks,
-            'dimension_separator': '/'
-        }
-    }
 
-    output_array = ts.open(output_spec, create=True, delete_existing=True).result()
+    write_array_to_disk_chunked(source, output_dirpath, output_chunks)
+    # output_spec = {
+    #     'driver': 'zarr3',
+    #     'kvstore': {
+    #         'driver': 'file',
+    #         'path': str(output_dirpath) 
+    #     },
+    #     'dtype': source.dtype.name,
+    #     'metadata': {
+    #         'shape': source.shape,
+    #         'chunks': output_chunks,
+    #         'dimension_separator': '/'
+    #     }
+    # }
 
-    processing_chunk_size = [512, 512, 512, 512, 512]
+    # output_array = ts.open(output_spec, create=True, delete_existing=True).result()
+
+    # processing_chunk_size = [512, 512, 512, 512, 512]
     
-    # Calculate number of chunks needed in each dimension
-    num_chunks = tuple(
-        (shape + chunk - 1) // chunk 
-        for shape, chunk in zip(source.shape, processing_chunk_size)
-    )
+    # # Calculate number of chunks needed in each dimension
+    # num_chunks = tuple(
+    #     (shape + chunk - 1) // chunk 
+    #     for shape, chunk in zip(source.shape, processing_chunk_size)
+    # )
     
-    # Process array in chunks
-    for idx in itertools.product(*[range(n) for n in num_chunks]):
-        # Calculate slice for this chunk
-        slices = tuple(
-            slice(i * c, min((i + 1) * c, s))
-            for i, c, s in zip(idx, processing_chunk_size, source.shape)
-        )
+    # # Process array in chunks
+    # for idx in itertools.product(*[range(n) for n in num_chunks]):
+    #     # Calculate slice for this chunk
+    #     slices = tuple(
+    #         slice(i * c, min((i + 1) * c, s))
+    #         for i, c, s in zip(idx, processing_chunk_size, source.shape)
+    #     )
         
-        # Read and write this chunk
-        chunk_data = source[slices].read().result()
-        output_array[slices].write(chunk_data).result()
+    #     # Read and write this chunk
+    #     chunk_data = source[slices].read().result()
+    #     output_array[slices].write(chunk_data).result()
         
-        # Optional progress indication
-        rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
+    #     # Optional progress indication
+    #     rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
     
 
 

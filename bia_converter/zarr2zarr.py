@@ -27,7 +27,7 @@ def calculate_downsampling_steps(shape):
 @app.command()
 def zarr_group_info(zarr_uri):
 
-    group = zarr.open_group(zarr_uri)
+    group = zarr.open_group(zarr_uri, mode='r')
     for k in group.array_keys():
         ar = group[k]
         rich.print(f"Key: {k}, shape: {ar.shape}, chunks: {ar.chunks}")
@@ -169,6 +169,8 @@ def n52zarr(
 
     rich.print(config)
 
+    group = zarr.open_group(output_base_dirpath)
+
     output_dirpath = output_base_dirpath / '0'
     if not output_dirpath.exists():
         write_array_to_disk_chunked(output_array, output_dirpath, config.target_chunks)
@@ -191,7 +193,6 @@ def n52zarr(
 
     # Create and write the OME-Zarr metadata    
     ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales, config.downsample_factors)
-    group = zarr.open_group(output_base_dirpath)
     group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
 
 
