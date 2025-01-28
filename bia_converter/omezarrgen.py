@@ -77,7 +77,7 @@ def create_ome_zarr_metadata(
     otherwise calculate them from the sizes of the"""
 
     # Open the group and find the arrays in it
-    group = zarr.open_group(zarr_group_uri)
+    group = zarr.open_group(zarr_group_uri, mode='r')
     array_keys = list(group.array_keys())
 
     # Make sure we sort in increasing numerical order - this assumes arrays are "0", "1", etc
@@ -194,7 +194,7 @@ def write_array_to_disk_chunked(source_array, output_dirpath, target_chunks):
             
         # Progress indication with timing
         rich.print(
-            f"Processed chunk [{n + 1}/{len(idx_list)}]{idx} of {tuple(n-1 for n in num_chunks)} | "
+            f"Processed chunk [{n + 1}/{len(idx_list)}] {idx} of {tuple(n-1 for n in num_chunks)} | "
             f"Elapsed: {str(timedelta(seconds=int(elapsed_time)))} | "
             f"ETA: {eta}"
         )
@@ -216,16 +216,19 @@ def rechunk_and_save_array(
     }).result()
 
     transposed = source.transpose(transpose_axes)
+
     write_array_to_disk_chunked(transposed, output_dirpath, target_chunks)
     
 
 def ensure_uri(path_or_uri):
     """Convert a path or string to a proper URI if needed."""
+
     if isinstance(path_or_uri, (str, Path)):
         parsed = urlparse(str(path_or_uri))
         if not parsed.scheme:
             # Convert local path to file:// URI
             return f"file://{Path(path_or_uri).absolute()}"
+        
     return path_or_uri
 
 
@@ -279,47 +282,7 @@ def downsample_array_and_write_to_dirpath(
         }
     }).result()
 
-
     write_array_to_disk_chunked(source, output_dirpath, output_chunks)
-    # output_spec = {
-    #     'driver': 'zarr3',
-    #     'kvstore': {
-    #         'driver': 'file',
-    #         'path': str(output_dirpath) 
-    #     },
-    #     'dtype': source.dtype.name,
-    #     'metadata': {
-    #         'shape': source.shape,
-    #         'chunks': output_chunks,
-    #         'dimension_separator': '/'
-    #     }
-    # }
-
-    # output_array = ts.open(output_spec, create=True, delete_existing=True).result()
-
-    # processing_chunk_size = [512, 512, 512, 512, 512]
-    
-    # # Calculate number of chunks needed in each dimension
-    # num_chunks = tuple(
-    #     (shape + chunk - 1) // chunk 
-    #     for shape, chunk in zip(source.shape, processing_chunk_size)
-    # )
-    
-    # # Process array in chunks
-    # for idx in itertools.product(*[range(n) for n in num_chunks]):
-    #     # Calculate slice for this chunk
-    #     slices = tuple(
-    #         slice(i * c, min((i + 1) * c, s))
-    #         for i, c, s in zip(idx, processing_chunk_size, source.shape)
-    #     )
-        
-    #     # Read and write this chunk
-    #     chunk_data = source[slices].read().result()
-    #     output_array[slices].write(chunk_data).result()
-        
-    #     # Optional progress indication
-    #     rich.print(f"Processed chunk {idx} of {tuple(n-1 for n in num_chunks)}")
-    
 
 
 def get_array_dims(group):

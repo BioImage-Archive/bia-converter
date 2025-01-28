@@ -169,7 +169,7 @@ def n52zarr(
 
     rich.print(config)
 
-    group = zarr.open_group(output_base_dirpath)
+    group = zarr.open_group(output_base_dirpath, zarr_version=config.zarr_version)
 
     output_dirpath = output_base_dirpath / '0'
     if not output_dirpath.exists():
@@ -193,7 +193,19 @@ def n52zarr(
 
     # Create and write the OME-Zarr metadata    
     ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales, config.downsample_factors)
-    group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
+    ome_metadata_dict = ome_zarr_metadata.model_dump(exclude_unset=True)
+    ome_metadata_dict.update(
+        {
+            "version": "0.5",
+            "_creator": {
+                "name": "bia-zarr"
+            }
+        }
+    )
+    ome_metadata = {
+        "ome": ome_metadata_dict
+    }
+    group.attrs.update(ome_metadata) # type: ignore
 
 
 if __name__ == "__main__":
