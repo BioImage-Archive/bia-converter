@@ -23,6 +23,8 @@ from .omezarrmeta import (
     Omero, Channel, Window, RDefs
 )
 
+from .proxyimage import OMEZarrImage
+
 
 def create_omero_metadata_object(zarr_group_uri: str):
     group = zarr.open_group(zarr_group_uri)
@@ -190,6 +192,7 @@ def rechunk_and_save_array(
     }).result()
 
     transposed = source.transpose(transpose_axes)
+    transposed = transposed[0,:,:,:,:]
     write_array_to_disk_chunked(transposed, output_dirpath, target_chunks)
     
 
@@ -428,3 +431,22 @@ def generate_dataset_objects(
     ]
 
     return datasets
+
+
+def get_chunk_sizes(image: OMEZarrImage) -> List[int]:
+    # Define the spatial dimensions
+    spatial_dims = {'z', 'y', 'x'}
+    
+    # Initialize an empty list to store chunk sizes
+    chunk_sizes = []
+    
+    # Iterate through each dimension in the order specified by `dimensions`
+    for dim in image.dimensions:
+        if dim in spatial_dims:
+            # Assign 64 for spatial dimensions
+            chunk_sizes.append(64)
+        else:
+            # Assign 1 for non-spatial dimensions
+            chunk_sizes.append(1)
+    
+    return chunk_sizes

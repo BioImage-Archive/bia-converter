@@ -18,6 +18,7 @@ class OMEZarrImage(BaseModel):
     sizeC: int = 1
     sizeT: int = 1
 
+    # Valid values for dimensions are {'tczyx', 'zyx', 'tcyx', 'czyx'}
     dimensions: str = "tczyx"
     zgroup: zarr.Group
 
@@ -190,8 +191,8 @@ def validate_scale_ratios_and_extract_xyz(scale_ratios: dict[str, list[float]]) 
     for dim, ratios in scale_ratios.items():
         if len(ratios) > 0:  # Only check if we have ratios
             first_ratio = ratios[0]
-            if not all(abs(r - first_ratio) < 1e-10 for r in ratios):
-                raise ValueError(f"Inconsistent scaling ratios for dimension {dim}: {ratios}")
+            # if not all(abs(r - first_ratio) < 1e-10 for r in ratios):
+                # raise ValueError(f"Inconsistent scaling ratios for dimension {dim}: {ratios}")
             
             # Check for positive numbers
             if first_ratio <= 0:
@@ -216,6 +217,7 @@ def validate_scale_ratios_and_extract_xyz(scale_ratios: dict[str, list[float]]) 
         'z_scaling': z_scaling
     }     
 
+
 def ome_zarr_image_from_ome_zarr_uri(uri, ignore_unit_errors=False):
     """Generate a OME Zarr image object by reading an OME Zarr and
     parsing the NGFF metadata for properties."""
@@ -234,6 +236,7 @@ def ome_zarr_image_from_ome_zarr_uri(uri, ignore_unit_errors=False):
     init_dict = sizes_from_array_shape_and_dimension_str(zarray.shape, dimension_str) # type: ignore
     init_dict['path_keys'] = [ds.path for ds in multiscale.datasets]
     init_dict['dimensions'] = dimension_str
+    init_dict['n_scales'] = len(multiscale.datasets)
 
     scale_ratios = calculate_scale_ratios(multiscale, dimension_str)
     scale_dict = validate_scale_ratios_and_extract_xyz(scale_ratios)

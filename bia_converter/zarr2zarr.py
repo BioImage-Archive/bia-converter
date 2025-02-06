@@ -119,23 +119,23 @@ def zarr2zarr(
     if not output_dirpath.exists():
         rechunk_and_save_array(input_array_uri, output_dirpath, config.target_chunks, config.transpose_axes)
 
-    # Regenerate the rest of the period by downsampling
-    for level in range(config.n_pyramid_levels - 1):
-        input_array_dirpath = output_base_dirpath / output_array_keys[level] 
-        output_array_dirpath = output_base_dirpath / output_array_keys[level+1]
-        if not output_array_dirpath.exists():
-            rich.print(f"Downsampling from {input_array_dirpath} to {output_array_dirpath}")
-            downsample_array_and_write_to_dirpath(
-                str(input_array_dirpath),
-                output_array_dirpath,
-                config.downsample_factors,
-                config.target_chunks
-            )
+    # # Regenerate the rest of the period by downsampling
+    # for level in range(config.n_pyramid_levels - 1):
+    #     input_array_dirpath = output_base_dirpath / output_array_keys[level] 
+    #     output_array_dirpath = output_base_dirpath / output_array_keys[level+1]
+    #     if not output_array_dirpath.exists():
+    #         rich.print(f"Downsampling from {input_array_dirpath} to {output_array_dirpath}")
+    #         downsample_array_and_write_to_dirpath(
+    #             str(input_array_dirpath),
+    #             output_array_dirpath,
+    #             config.downsample_factors,
+    #             config.target_chunks
+    #         )
 
-    # Create and write the OME-Zarr metadata    
-    ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales, config.downsample_factors)
-    group = zarr.open_group(output_base_dirpath)
-    group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
+    # # Create and write the OME-Zarr metadata    
+    # ome_zarr_metadata = create_ome_zarr_metadata(str(output_base_dirpath), "test_name", config.coordinate_scales, config.downsample_factors)
+    # group = zarr.open_group(output_base_dirpath)
+    # group.attrs.update(ome_zarr_metadata.model_dump(exclude_unset=True)) # type: ignore
 
 
 @app.command()

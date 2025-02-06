@@ -52,5 +52,5 @@ class MultiScaleImage(BaseModel):
     version: str
 
 class ZMeta(BaseModel):
-    omero: Optional[Omero]
+    omero: Optional[Omero] = None
     multiscales: List[MultiScaleImage]

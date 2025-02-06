@@ -289,7 +289,7 @@ def render_proxy_image(proxy_im, bbrel=DEFAULT_BB, dims=(512, 512), t=None, z=No
     if not t:
         t = proxy_im.sizeT // 2
     if not z:
-        z = proxy_im.sizeZ // 2
+        z = darray.shape[2] // 2
 
     channels_to_render = min(proxy_im.sizeC, len(DEFAULT_COLORS))
     if not mode:
