@@ -307,6 +307,30 @@ def fetch_ome_zarr_zip_fileref_and_unzip(
     return unpacked_zarr_dirpath
 
 
+def convert_with_bioformats2raw_single_fileref(fileref, base_image_rep):
+
+    conversion_input_fpath = stage_fileref_and_get_fpath(fileref)
+    output_zarr_fpath = get_conversion_output_path(base_image_rep.uuid)
+    logger.info(f"Converting from {conversion_input_fpath} to {output_zarr_fpath}")
+    if not output_zarr_fpath.exists():
+        run_zarr_conversion(conversion_input_fpath, output_zarr_fpath)
+
+    return output_zarr_fpath
+
+
+def convert_with_bioformats2raw(input_image_rep, file_references, base_image_rep):
+
+    if len(file_references) == 1:
+        file_reference = file_references[0]
+        output_zarr_fpath = convert_with_bioformats2raw_single_fileref(file_reference, base_image_rep)
+    elif len(file_references > 1):
+        output_zarr_fpath = convert_with_bioformats2raw_pattern(input_image_rep, file_references, base_image_rep)
+    else:
+        raise ValueError("Can't convert with 0 file references!")
+    
+    return output_zarr_fpath
+    
+
 def convert_with_bioformats2raw_pattern(input_image_rep, file_references, base_image_rep):
     attrs = attributes_by_name(input_image_rep)
     parse_template = attrs['file_pattern']['file_pattern']
@@ -346,13 +370,13 @@ def convert_uploaded_by_submitter_to_interactive_display(
         assert len(file_references) == 1
         output_zarr_fpath = fetch_ome_zarr_zip_fileref_and_unzip(file_references[0], base_image_rep)
     else:
-        output_zarr_fpath = convert_with_bioformats2raw_pattern(input_image_rep, file_references, base_image_rep)
+        output_zarr_fpath = convert_with_bioformats2raw(input_image_rep, file_references, base_image_rep)
 
     # Upload to S3
     dst_suffix = create_s3_uri_suffix_for_image_representation(base_image_rep)
     zarr_group_uri = sync_dirpath_to_s3(output_zarr_fpath, dst_suffix)
-    # ome_zarr_uri = zarr_group_uri + '/0'
-    ome_zarr_uri = zarr_group_uri
+    ome_zarr_uri = zarr_group_uri + '/0'
+    # ome_zarr_uri = zarr_group_uri
     # rich.print(zarr_group_uri)
     # import sys; sys.exit(0)
 
